@@ -1,10 +1,10 @@
 ---
 title: "Getting started with enfold"
 vignette: >
-  %\VignetteIndexEntry{Getting started with enfold}
+%\VignetteIndexEntry{Getting started with enfold}
   %\VignetteEncoding{UTF-8}
   %\VignetteEngine{quarto::html}
-format:
+  format:
   html:
     toc: true
     toc-depth: 3
@@ -46,9 +46,9 @@ predictions on mutated data sets is a first-class feature and
 recommended whenever ensembling is done for a doubly robust estimator.
 Users that use `enfold` for pure prediction tasks will still find many
 advanced features, such as pipelines and hyperparameter optimization,
-but might find it lacking for model deployment.
+but will find it lacking for model deployment.
 
-This guide will use the `Boston` housing data set to introduce the core
+This guide will use a simulated medical data set to introduce the core
 features and workflow of the `enfold` package. At the end, users should
 know how to estimate ensembles in `enfold` using provided templates, as
 well as some of the quirks the package has. Following guides will go
@@ -85,9 +85,8 @@ ensembles.
 In this guide, we will go in the order: initialize, cross-validation,
 learners, metalearners, fit, and then investigate the performance of our
 ensembles. Note that, when working on your own projects, you will
-probably want to explore your data before analyses, say by plotting
-variables, gaining some understanding of how they are distributed, and
-similar. We omit this for brevity.
+probably want to explore your data before analyses. We omit this for brevity;
+the data are simulated such that they are well-behaved.
 
 ## Step 1 — Initialize a task
 
@@ -139,9 +138,10 @@ below, where both options are shown.
 
 To start, we will add two learners. The first will be the empirical mean
 of the outcome (`lrn_mean()`), which is a useful benchmark: it uses
-*very* little information to arrive at a prediction. The second will be
-a generalized linear model (`lrn_glm()`), and we will tell it to use a
-Gaussian (normal) likelihood via the `family` argument.
+*very* little information to arrive at a prediction, and any other learner
+should beat it comfortably. The second will be a generalized linear model 
+(`lrn_glm()`), and we will tell it to use a Gaussian (normal) likelihood via 
+the `family` argument.
 
 ```{r learners}
 task <- task |>
@@ -156,7 +156,7 @@ In R and other programming languages, a `pipe` can be used to resolve
 nested functions by composing them from left to right. For example, if
 we want to take the mean of some variable and then round it, we could
 write either `round(mean(my_variable))`, or
-`mean(my_variable) |> round()`. While piping is overkill here, it
+`mean(my_variable) |> round()`. While piping is overkill for this example, it
 illustrates the concept: one takes the object created on the left of the
 pipe, and inserts it as the first argument to the function on the right.
 In this example, we first calculate the mean of `my_variable`, and then
@@ -191,6 +191,7 @@ initialize_and_add_learners <- initialize_enfold(x, y) |>
   )
 
 ```
+
 :::
 
 You can use a host of other learner templates if you prefer. Available built-in 
@@ -201,7 +202,7 @@ learner constructors include `lrn_mean`, `lrn_glm`, `lrn_gam`, `lrn_glmnet`,
 
 Metalearners take the out-of-fold predictions of all base learners as
 input and learn a combination rule. They are added with
-`add_metalearners()` and follow the `mtl_*` naming convention.
+`add_metalearners()` and their templates follow the `mtl_*` naming convention.
 
 ```{r metalearners}
 task <- task |>
@@ -214,8 +215,8 @@ task <- task |>
 `mtl_selector` is a discrete rule that assigns all weight to the base
 learner with the lowest cross-validated loss. `mtl_superlearner` instead builds a
 convex combination of learners. To be specific, it regresses the outcome
-on cross-validated predictions of each learner under the constraints that no
-learner can have a negative coefficient, and that the sum of coefficients is `1`.
+on cross-validated predictions of each learner and optimizes under the constraints that no
+learner has a negative weight, and that the sum of weights is `1`.
 It is a good default metalearner to use and recommended over `mtl_selector`
 for performance. Both accept a `loss_fun` argument to control which
 loss drives the weighting (default: `loss_gaussian()`).
@@ -224,39 +225,110 @@ This is what we refer to as ensemble building: we take cross-validated predictio
 of a number of base learners, and try to find some way of combining them to
 optimize performance. The most common metalearner is simple choosing (which
 `mtl_selector()` does), but there is nothing wrong with using more complex
-metalearners (like `mtl_superlearner()`). However, with very complex metalearners
-and many base learners we risk overfitting. While the superlearner is constrained
-enough to rarely ever overfit, having `mtl_selector()` as a simpler benchmark
-and cross-validating ensemble building can make us a little more sure.
+metalearners (like `mtl_superlearner()`). However, if our metalearners are very
+complex and we have many learners, we risk overfitting. The superlearner is
+still simple enough for the overfitting risk to be very small, but to be sure
+we can cross-validate our ensemble building process and compare its performance
+to the even simpler `mtl_selector()`.
 
 
 ## Step 4 — Add cross-validation folds
 
-`add_cv_folds()` specifies how folds are created.
+To add cross-validation folds, we use the function `add_cv_folds()`.
+Besides the task object, it takes one value for `inner_cv` and one for `outer_cv`.
+Each controls a different part of the cross-validation process. Note that
+it is allowed to make one of them `NA`, but not both. The simplest way to
+instruct `add_cv_folds()` is to enter an integer or `NA` to each argument, 
+which enables simple V-fold cross-validation. Here is how they compare:
 
--   `inner_cv` controls the folds used to build metalearners (the inner
-    loop).
--   `outer_cv` controls the folds used to evaluate the full ensemble
-    (the outer loop).
+- `outer_cv` controls validation for the full ensemble. For example,
+passing `outer_cv = 5` means that we build our ensembles five times in evenly-sized
+training sets, and each observation acts as validation for one of the training sets. 
+This is useful to get an honest performance evaluation of our
+metalearners, or to generate out-of-fold predictions on mutated data sets.
+If we set this to `NA`, only one ensemble is built on the full data.
+- `inner_cv` controls how ensembles are built. For example, passing `inner_cv = 5`
+means that five cross-validation folds are used to build each ensemble. If this
+is `NA`, no ensemble is built. Instead, learners are trained and provide
+cross-validated predictions via as many folds as specified in `outer_cv`.
 
-Pass an integer for simple V-fold CV, a custom function
-`function(n, ...)`, or `NA` / `NULL` to skip that level.
+::: {.callout-tip collapse="true" title="Advanced note: how inner and outer cross-validation compose"}
+The procedure underlying this is also referred to as *nested cross-validation*.
+In words, if both `inner_cv` and `outer_cv` have a non-`NA`
+value, the folds for `inner_cv` are nested within each training set in `outer_cv`.
+This means that an ensemble is built entirely within one of the training sets
+in `outer_cv`: 
+
+1. the training set is treated as a full data-set, 
+2. folds are created for that training set, 
+3. the ensemble is built using cross-validated predictions for each learner,
+4. learners are re-trained on the full training set,
+5. ensemble weights and learner predictions are used to generate out-of-fold
+predictions on the outer validation set
+
+This is repeated for each outer fold, such that each metalearner has fully
+cross-validated predictions that can be used as-is or to compare metalearner performance.
+:::
+
+If we want access to cross-validated predictions of model ensembles, we need to
+pass a non-`NA` value to both `inner_cv` and `outer_cv`. If we just want to train
+one ensemble and do not care about an honest performance evaluation, we set `outer_cv`
+to `NA`. If we do not want to build ensembles and just want cross-validated
+predictions for our learners, we set `inner_cv` to `NA`.
+
+::: {.callout-tip collapse="true" title="Advanced note: passing functions for complex CV schemes"}
+Passing integers into `inner_cv` and `outer_cv` is fully sufficient if we only
+need simple V-fold validation. Unfortunately, we sometimes need more. For
+example, if we have clustered data, we need to use clustered cross-validation:
+all observations within a cluster should end up in the same fold.
+
+In such cases, we can instead pass a function to `inner_cv` and `outer_cv`.
+This function should have an argument `n`, but can have other arguments as well.
+If there are other arguments, we simply pass them as an additional argument to `add_cv_folds`: it has dots, so we simply write them next to `inner_cv` and 
+`outer_cv`. The code block below shows how we could do cross-validation,
+stratified by the variable `coronary_heart_disease`. We remove it as a predictor
+and instead pass it as part of our cross-validation instruction:
+
+```{r folds}
+# Get CHD as separate variable
+chd <- enfold_demo$coronary_heart_disease
+
+# Remove it from our predictors
+x_no_chd <- x[,-which(colnames(enfold_demo) == "coronary_heart_disease")]
+
+# Create a new task for illustration that stratifies cross-validation
+task_with_stratified_folds <- initialize_enfold(x_no_chd, y) |>
+  add_cv_folds(
+    inner_cv = origami::make_folds(V = 5), # Pass number of folds here already
+    outer_cv = origami::make_folds(V = 8), # Can pass more folds here if desired
+    fold_fun = folds_vfold, # Required argument telling make_folds to do V-fold CV
+    strata_ids = chd # Optional argument telling make_folds what to stratify by
+  )
+```
+
+The contract is that (HOW DOES THE OUTPUT OF CUSTOM FUNCTIONS NEED TO LOOK LIKE?).
+The `enfold` package internally uses `origami` for fold creation, so a safe option
+is using one of the many approaches implemented in `origami`, if possible.
+
+:::
+
+For this vignette, we will want to compare the performance of our metalearners.
+Therefore, we do both inner and outer cross-validation:
 
 ```{r folds}
 task <- task |>
   add_cv_folds(inner_cv = 5L, outer_cv = 5L)
 ```
 
-Alternatively you can build an `enfold_cv` object separately with
+Alternatively we could build an `enfold_cv` object separately with
 `create_cv_folds()` and pass it via the `cv` argument. This is useful
-when you want to reuse the same fold splits across multiple tasks.
+if we want to reuse the same fold splits across multiple tasks.
 
 ```{r folds-reuse, eval = FALSE}
-cv <- create_cv_folds(n = nrow(x), inner_cv = 5L, outer_cv = 5L)
-task_alt <- initialize_enfold(x, y) |>
-  add_learners(lrn_glm("glm", family = gaussian())) |>
-  add_metalearners(mtl_selector("selector")) |>
-  add_cv_folds(cv = cv)
+separate_cv <- create_cv_folds(n = nrow(x), inner_cv = 5L, outer_cv = 5L)
+
+task_separate_cv <- initialize_enfold(x, y) |>
+  add_cv_folds(cv = separate_cv)
 ```
 
 ## Step 5 — Fit
