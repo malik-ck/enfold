@@ -2,8 +2,8 @@
 title: "Getting started with enfold"
 vignette: >
   %\VignetteIndexEntry{Getting started with enfold}
-  %\VignetteEngine{quarto::html}
   %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{quarto::html}
 format:
   html:
     toc: true
@@ -12,6 +12,9 @@ knitr:
   opts_chunk:
     collapse: true
     comment: "#>"
+editor: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include = FALSE}
@@ -20,81 +23,90 @@ library(enfold)
 
 ## Overview
 
-`enfold` (*ensemble fold*) is a package that makes model stacking and ensembling
-in R quick and convenient. Users have very fine-grained control over *how* ensembles
-are built, and ensembles can be cross-validated with ease.
+`enfold` (*ensemble fold*) is a package that makes model stacking and
+ensembling in R quick and convenient. Users have very fine-grained
+control over *how* ensembles are built, and ensembles can be
+cross-validated with ease.
 
-`enfold` is designed to be as type-agnostic as is reasonable. This means that the
-package internally does nothing to change the data you hand in. It is entirely
-the job of the learners to take training data, to know how to fit it, 
-and to predict on validation data. This is very helpful for any user that is interested 
-in implementing their own learner: this is easy in `enfold`, and users do not 
-need to be scared of any hidden effects the package has on their data. For users 
-that do not need this flexibility, `enfold` implements many learner templates that 
-are well-equipped to handle all types of matrices and data frames as predictor input.
+`enfold` is designed to be as type-agnostic as is reasonable. This means
+that the package internally does nothing to change the data you hand in.
+It is entirely the job of the learners to take training data, to know
+how to fit it, and to predict on validation data. This is very helpful
+for any user that is interested in implementing their own learner: this
+is easy in `enfold`, and users do not need to be scared of any hidden
+effects the package has on their data. For users that do not need this
+flexibility, `enfold` implements many learner templates that are
+well-equipped to handle all types of matrices and data frames as
+predictor input.
 
-`enfold` was developed as a companion package to a package for causal inference
-via target trial emulation named `enact`, and its set of features somewhat
-reflects this. For example, getting cross-validated predictions on mutated data
-sets is a first-class feature and recommended whenever ensembling is done for a
-doubly robust estimator. Users that use `enfold` for pure prediction tasks will
-still find many advanced features, such as pipelines and hyperparameter
-optimization, but might find it lacking for model deployment.
+`enfold` was developed as a companion package to a package for causal
+inference via target trial emulation named `enact`, and its set of
+features somewhat reflects this. For example, getting cross-validated
+predictions on mutated data sets is a first-class feature and
+recommended whenever ensembling is done for a doubly robust estimator.
+Users that use `enfold` for pure prediction tasks will still find many
+advanced features, such as pipelines and hyperparameter optimization,
+but might find it lacking for model deployment.
 
-This guide will use the `Boston` housing data set to introduce the core features
-and workflow of the `enfold` package. At the end, users should know how to
-estimate ensembles in `enfold` using provided templates, as well as some of
-the quirks the package has. Following guides will go into detail on some advanced
-functionality, such as pipelines, grids, constructors for custom learners and
-hyperparameter optimizers, and the package's internal structure.
-
+This guide will use the `Boston` housing data set to introduce the core
+features and workflow of the `enfold` package. At the end, users should
+know how to estimate ensembles in `enfold` using provided templates, as
+well as some of the quirks the package has. Following guides will go
+into detail on some advanced functionality, such as pipelines, grids,
+constructors for custom learners and hyperparameter optimizers, and the
+package's internal structure.
 
 ## Data
 
-We use the `Boston` housing dataset from the `MASS` package to introduce `enfold`.
-As outcome, we use the variable `medv`, which stands for median value of
-owner-occupied homes.
+We use a simulated data set from the `enfold` package named
+`enfold_demo`. The outcome we are interested in predicting is `hba1c`,
+which reflects a person's average blood glucose level over roughly the
+preceding two to three months. It's used to both diagnose diabetes and
+to monitor glycemic control in people already diagnosed.
 
 ```{r data}
-data("Boston", package = "MASS")
+data("enfold_demo", package = "enfold")
 
-x <- Boston[, setdiff(names(Boston), "medv")]
-y <- Boston$medv
+x <- enfold_demo[, setdiff(names(Boston), "hba1c")]
+y <- enfold_demo$hba1c
 
 cat("Rows:", nrow(x), "| Predictors:", ncol(x), "\n")
 ```
 
-Using enfold now consists of five steps. First, we initialize a task by passing
-data. Following this, we tell the task which learner(s) we want to use, which
-metalearner(s) (ensembling algorithms) we want to use, and how we want to
-cross-validate, in any order. Last, we call fit() on the task to fit the ensemble(s).
-Afterwards, a suite of evaluator functions will tell us how well our ensembles
-and learners did. Of course, we can also call `predict` on a fitted task
-to get predictions for all ensembles.
+Using enfold now consists of five steps. First, we initialize a task by
+passing data. Following this, we tell the task which learner(s) we want
+to use, which metalearner(s) (ensembling algorithms) we want to use, and
+how we want to cross-validate, in any order. Last, we call fit() on the
+task to fit the ensemble(s). Afterwards, a suite of evaluator functions
+will tell us how well our ensembles and learners did. Of course, we can
+also call `predict` on a fitted task to get predictions for all
+ensembles.
 
-In this guide, we will go in the order: initialize, cross-validation, learners,
-metalearners, fit, and then investigate the performance of our ensembles. Note that,
-when working on your own projects, you will probably want to explore your data
-before analyses, say by plotting variables, gaining some understanding of
-how they are distributed, and similar. We omit this for brevity.
+In this guide, we will go in the order: initialize, cross-validation,
+learners, metalearners, fit, and then investigate the performance of our
+ensembles. Note that, when working on your own projects, you will
+probably want to explore your data before analyses, say by plotting
+variables, gaining some understanding of how they are distributed, and
+similar. We omit this for brevity.
 
 ## Step 1 — Initialize a task
 
-`initialize_enfold()` creates an `enfold_task` object that stores the predictor
-matrix `x` and outcome `y`. 
+`initialize_enfold()` creates an `enfold_task` object that stores the
+predictor data `x` and outcome `y`.
 
 ::: {.callout-tip collapse="true" title="Advanced note: data storage"}
-After initialization, the task does not actually store `x` and `y`. It instead
-puts a reference to the handed-in data into a fresh environment and locks it.
-This ensures that data is not unnecessarily copied. If users delete `x` and `y`
-from their global environment, they are still referenced from this environment
-and therefore available.
+After initialization, the task does not actually store `x` and `y`. It
+instead puts a reference to the handed-in data into a fresh environment
+and locks it. This ensures that data is not unnecessarily copied. If
+users delete `x` and `y` from their global environment, they are still
+referenced from this environment and therefore available.
 
-`enfold` has a very piping-friendly workflow, which might not play well with
-the reference semantics that environments introduce. This issue should be
-alleviated by ensuring that the data stored in `x` and `y` are never changed by the
-`enfold` task (only by learners that receive a copy of the data for fitting).
-Since their environment is locked, this can also not happen by accident.
+`enfold` has a very piping-friendly workflow, which might not play well
+with the reference semantics that environments introduce. This issue
+should be alleviated by ensuring that the data stored in `x` and `y` are
+never changed by the `enfold` task (only by learners that receive a copy
+of the data for fitting). Since their environment is locked, this can
+also not happen by accident.
 :::
 
 We can afterwards look at the slots inside the task:
@@ -104,31 +116,32 @@ task <- initialize_enfold(x, y)
 task
 ```
 
-That's many empty slots! We will fill these as we continue adding bits to
-the task. By the time the task is fully specified but not yet fit, the only
-remaining empty slots will be `fit_objects` and `ensembles`, which hold fitted
-learners and metalearners.
+That's many empty slots! We will fill these as we continue adding bits
+to the task. By the time the task is fully specified but not yet fit,
+the only remaining empty slots will be `fit_objects` and `ensembles`,
+which hold fitted learners and metalearners.
 
 ## Step 2 — Add learners
 
-Learners are added via `add_learners()`. The learner templates provided by
-`enfold` follow the naming convention that they start with `lrn_*`.
-Each learner template has a `name` argument which needs to be filled, as well
-as (optionally) additional arguments for *hyperparameters*. This is how we might
-fit random forests with different values for, say, *mtry*. You can check each
-learner's documentation for more detail.
+Learners are added via `add_learners()`. The learner templates provided
+by `enfold` follow the naming convention that they start with `lrn_*`.
+Each learner template has a `name` argument which needs to be filled, as
+well as (optionally) additional arguments for *hyperparameters*. This is
+how we might fit random forests with different values for, say, *mtry*.
+You can check each learner's documentation for more detail.
 
-`add_learners()` takes as arguments `task` and dots, which means that its
-first argument needs to be a task object, and each following argument is
-a learner object. The more natural way of calling `add_learners()` is via
-*piping*. We will use pipes throughout this guide; users not familiar with
-piping can expand the optional code block below, where both options are shown.
+`add_learners()` takes as arguments `task` and dots, which means that
+its first argument needs to be a task object, and each following
+argument is a learner object. The more natural way of calling
+`add_learners()` is via *piping*. We will use pipes throughout this
+guide; users not familiar with piping can expand the optional code block
+below, where both options are shown.
 
-To start, we will add two learners. The first will be the empirical
-mean of the outcome (`lrn_mean()`), which is a useful benchmark: it uses *very* 
-little information to arrive at a prediction. The second will be a
-generalized linear model (`lrn_glm()`), and we will tell it to use a Gaussian
-(normal) likelihood via the `family` argument.
+To start, we will add two learners. The first will be the empirical mean
+of the outcome (`lrn_mean()`), which is a useful benchmark: it uses
+*very* little information to arrive at a prediction. The second will be
+a generalized linear model (`lrn_glm()`), and we will tell it to use a
+Gaussian (normal) likelihood via the `family` argument.
 
 ```{r learners}
 task <- task |>
@@ -139,19 +152,20 @@ task <- task |>
 ```
 
 ::: {.callout-tip collapse="true" title="How to pipe"}
+In R and other programming languages, a `pipe` can be used to resolve
+nested functions by composing them from left to right. For example, if
+we want to take the mean of some variable and then round it, we could
+write either `round(mean(my_variable))`, or
+`mean(my_variable) |> round()`. While piping is overkill here, it
+illustrates the concept: one takes the object created on the left of the
+pipe, and inserts it as the first argument to the function on the right.
+In this example, we first calculate the mean of `my_variable`, and then
+put the result as the first argument into `round`.
 
-In R and other programming languages, a `pipe` can be used to resolve nested
-functions by composing them from left to right. For example, if we want to take
-the mean of some variable and then round it, we could write either
-`round(mean(my_variable))`, or `mean(my_variable) |> round()`. While piping
-is overkill here, it illustrates the concept: one takes the object
-created on the left of the pipe, and inserts it as the first argument to the
-function on the right. In this example, we first calculate the mean of `my_variable`,
-and then put the result as the first argument into `round`.
-
-In cases where we want to chain many functions together, piping helps make
-things more readable. Below you can see how we could add learners to a task
-without and with piping; the latter is the expected and recommended workflow in `enfold`.
+In cases where we want to chain many functions together, piping helps
+make things more readable. Below you can see how we could add learners
+to a task without and with piping; the latter is the expected and
+recommended workflow in `enfold`.
 
 ```{r pipes}
 
@@ -177,22 +191,17 @@ initialize_and_add_learners <- initialize_enfold(x, y) |>
   )
 
 ```
-
 :::
 
-`lrn_mean` predicts the training-set mean for every observation and serves as a
-useful lower bound. `lrn_glm` wraps `stats::glm` and handles data frames
-(including factor columns) automatically.
-
-Available built-in learner constructors include `lrn_mean`, `lrn_glm`,
-`lrn_gam`, `lrn_glmnet`, `lrn_ranger`, `lrn_xgboost`, and more. See their
-help pages for details.
+You can use a host of other learner templates if you prefer. Available built-in 
+learner constructors include `lrn_mean`, `lrn_glm`, `lrn_gam`, `lrn_glmnet`, 
+`lrn_ranger`, `lrn_xgboost`, and more. See their help pages for details.
 
 ## Step 3 — Add metalearners
 
-Metalearners take the out-of-fold predictions of all base learners as input and
-learn a combination rule. They are added with `add_metalearners()` and follow
-the `mtl_*` naming convention.
+Metalearners take the out-of-fold predictions of all base learners as
+input and learn a combination rule. They are added with
+`add_metalearners()` and follow the `mtl_*` naming convention.
 
 ```{r metalearners}
 task <- task |>
@@ -202,21 +211,36 @@ task <- task |>
   )
 ```
 
-`mtl_selector` is a discrete rule that assigns all weight to the base learner
-with the lowest cross-validated loss. `mtl_superlearner` uses Frank-Wolfe
-optimization to find a convex weighting that minimizes a user-specified loss.
-Both accept a `loss_fun` argument to control which loss drives the weighting
-(default: `loss_gaussian()`).
+`mtl_selector` is a discrete rule that assigns all weight to the base
+learner with the lowest cross-validated loss. `mtl_superlearner` instead builds a
+convex combination of learners. To be specific, it regresses the outcome
+on cross-validated predictions of each learner under the constraints that no
+learner can have a negative coefficient, and that the sum of coefficients is `1`.
+It is a good default metalearner to use and recommended over `mtl_selector`
+for performance. Both accept a `loss_fun` argument to control which
+loss drives the weighting (default: `loss_gaussian()`).
+
+This is what we refer to as ensemble building: we take cross-validated predictions
+of a number of base learners, and try to find some way of combining them to
+optimize performance. The most common metalearner is simple choosing (which
+`mtl_selector()` does), but there is nothing wrong with using more complex
+metalearners (like `mtl_superlearner()`). However, with very complex metalearners
+and many base learners we risk overfitting. While the superlearner is constrained
+enough to rarely ever overfit, having `mtl_selector()` as a simpler benchmark
+and cross-validating ensemble building can make us a little more sure.
+
 
 ## Step 4 — Add cross-validation folds
 
 `add_cv_folds()` specifies how folds are created.
 
-- `inner_cv` controls the folds used to build metalearners (the inner loop).
-- `outer_cv` controls the folds used to evaluate the full ensemble (the outer loop).
+-   `inner_cv` controls the folds used to build metalearners (the inner
+    loop).
+-   `outer_cv` controls the folds used to evaluate the full ensemble
+    (the outer loop).
 
-Pass an integer for simple V-fold CV, a custom function `function(n, ...)`, or
-`NA` / `NULL` to skip that level.
+Pass an integer for simple V-fold CV, a custom function
+`function(n, ...)`, or `NA` / `NULL` to skip that level.
 
 ```{r folds}
 task <- task |>
@@ -224,8 +248,8 @@ task <- task |>
 ```
 
 Alternatively you can build an `enfold_cv` object separately with
-`create_cv_folds()` and pass it via the `cv` argument. This is useful when you
-want to reuse the same fold splits across multiple tasks.
+`create_cv_folds()` and pass it via the `cv` argument. This is useful
+when you want to reuse the same fold splits across multiple tasks.
 
 ```{r folds-reuse, eval = FALSE}
 cv <- create_cv_folds(n = nrow(x), inner_cv = 5L, outer_cv = 5L)
@@ -237,15 +261,16 @@ task_alt <- initialize_enfold(x, y) |>
 
 ## Step 5 — Fit
 
-`fit()` trains all learners and metalearners according to the fold structure.
+`fit()` trains all learners and metalearners according to the fold
+structure.
 
 ```{r fit}
 task <- fit(task)
 task
 ```
 
-For parallel execution across outer folds, set a `future` plan *before* calling
-`fit()`:
+For parallel execution across outer folds, set a `future` plan *before*
+calling `fit()`:
 
 ```{r parallel, eval = FALSE}
 future::plan(future::multisession, workers = 4L)
@@ -257,9 +282,9 @@ future::plan(future::sequential)   # reset afterwards
 
 ### Cross-validated predictions
 
-`predict(task, type = "cv")` returns out-of-fold ensemble predictions stitched
-back together in the original observation order. When multiple metalearners are
-present, a named list is returned.
+`predict(task, type = "cv")` returns out-of-fold ensemble predictions
+stitched back together in the original observation order. When multiple
+metalearners are present, a named list is returned.
 
 ```{r predict-cv}
 cv_preds <- predict(task, type = "cv")
@@ -267,7 +292,8 @@ cv_preds <- predict(task, type = "cv")
 
 ### Overall risk
 
-`risk()` summarizes cross-validated performance as mean loss per metalearner.
+`risk()` summarizes cross-validated performance as mean loss per
+metalearner.
 
 ```{r risk}
 risk(task, loss_fun = loss_gaussian(), type = "cv")
@@ -275,8 +301,8 @@ risk(task, loss_fun = loss_gaussian(), type = "cv")
 
 ### Per-fold risk
 
-`fold_risk()` breaks the same summary down by outer fold, which is useful for
-assessing stability.
+`fold_risk()` breaks the same summary down by outer fold, which is
+useful for assessing stability.
 
 ```{r fold-risk}
 fold_risk(task, loss_fun = loss_gaussian())
@@ -284,8 +310,8 @@ fold_risk(task, loss_fun = loss_gaussian())
 
 ### Observation-level loss
 
-`cv_loss()` returns a data frame with one loss value per observation, enabling
-loss distribution plots and outlier inspection.
+`cv_loss()` returns a data frame with one loss value per observation,
+enabling loss distribution plots and outlier inspection.
 
 ```{r cv-loss}
 obs_loss <- cv_loss(task, loss_fun = loss_gaussian())
@@ -294,9 +320,9 @@ head(obs_loss)
 
 ### Base-learner predictions and risk
 
-`predict_learners()` and `risk_learners()` expose the individual base-learner
-predictions before any metalearning, which helps to understand which learners
-contribute most.
+`predict_learners()` and `risk_learners()` expose the individual
+base-learner predictions before any metalearning, which helps to
+understand which learners contribute most.
 
 ```{r learner-risk}
 risk_learners(task, loss_fun = loss_gaussian(), type = "cv")
@@ -304,9 +330,10 @@ risk_learners(task, loss_fun = loss_gaussian(), type = "cv")
 
 ### Predicting on new data
 
-`predict(task, type = "ensemble")` uses a fitted ensemble (not cross-validated)
-to score new observations. For a cross-validated task you must specify which
-outer-fold ensemble to use via `ensemble_fold_id`.
+`predict(task, type = "ensemble")` uses a fitted ensemble (not
+cross-validated) to score new observations. For a cross-validated task
+you must specify which outer-fold ensemble to use via
+`ensemble_fold_id`.
 
 ```{r predict-new, eval = FALSE}
 new_preds <- predict(task, newdata = x[1:10, ],
@@ -316,17 +343,18 @@ new_preds <- predict(task, newdata = x[1:10, ],
 ## Advanced functionality
 
 You now know how to fit and evaluate ensembles via the `enfold` package!
-If you want, you can take a deep dive into some of the more advanced features the
-package has. Below we will briefly introduce pipelines and grids, which are
-commonly available in machine learning libraries and allow for very flexible
-modeling. Both of them will also receive separate guides that go into more
-detail for interested users.
+If you want, you can take a deep dive into some of the more advanced
+features the package has. Below we will briefly introduce pipelines and
+grids, which are commonly available in machine learning libraries and
+allow for very flexible modeling. Both of them will also receive
+separate guides that go into more detail for interested users.
 
 ### Pipelines
 
-`make_pipeline()` chains learners so that each stage's output feeds into the
-next. This is useful for screeners, basis expanders, or post-processing steps.
-Branching within a stage creates one independent path per combination.
+`make_pipeline()` chains learners so that each stage's output feeds into
+the next. This is useful for screeners, basis expanders, or
+post-processing steps. Branching within a stage creates one independent
+path per combination.
 
 ```{r pipelines, eval = FALSE}
 # A screener upstream, then two competing learners downstream
@@ -345,9 +373,9 @@ task_pipe <- initialize_enfold(x, y) |>
   fit()
 ```
 
-`predict()` on a fitted pipeline returns a named list with one entry per path
-(e.g. `"screener/glm"`, `"screener/mean"`). Metalearners receive each path as
-an independent learner.
+`predict()` on a fitted pipeline returns a named list with one entry per
+path (e.g. `"screener/glm"`, `"screener/mean"`). Metalearners receive
+each path as an independent learner.
 
 ### Hyperparameter grids
 
@@ -369,8 +397,8 @@ task_grid <- initialize_enfold(x, y) |>
   fit()
 ```
 
-Each hyperparameter combination is treated as a separate learner and handed to
-the metalearner together with the other base learners.
+Each hyperparameter combination is treated as a separate learner and
+handed to the metalearner together with the other base learners.
 
 ## Session info
 
