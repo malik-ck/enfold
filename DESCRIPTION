@@ -1,0 +1,38 @@
+Package: enfold
+Title: Model Ensembling With Nested Cross-Validation
+Version: 0.0.0.9000
+Authors@R: 
+    person("Malik", "Cakir", , "enes.cakir@med.uni-goettingen.de", role = c("aut", "cre"))
+Description: A model ensembling toolbox that makes nested cross-validation
+    convenient and accessible.  Applicable to all supervised learning
+    problems, but designed with nuisance model estimation for causal
+    inference in mind.  Provides many learner templates and hyperparameter
+    search strategies, with pipelines for complex workflows.  To
+    accommodate a large variety of use cases, the package is designed to be
+    flexible and extensible, allowing users to easily create custom
+    learners, metalearners, and hyperparameter search strategies.
+License: MIT + file LICENSE
+Depends: R (>= 4.1.0)
+Imports: 
+    future.apply,
+    nnls,
+    origami,
+    rlang,
+    splines,
+    stats,
+    utils
+Suggests: 
+    earth,
+    hal9001,
+    future,
+    glmnet,
+    mboost,
+    mgcv,
+    ranger,
+    rBayesianOptimization,
+    RSpectra,
+    testthat,
+    xgboost
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
