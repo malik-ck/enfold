@@ -299,7 +299,7 @@ test_that("cv_fit.enfold_grid name format is prefix/param=val,...", {
 test_that("enfold_grid works inside fit() with inner CV", {
   params <- specify_hyperparameters(num.trees = c(100L, 200L))
   g <- grd_random("RF", lrn_ranger("RF"), params, n_candidates = 2L, seed = 1L)
-  glmn <- lrn_glmnet("GLMNET", gaussian(), alpha = 1, nlambda = 20)
+  glmn <- lrn_glmnet("GLMNET", gaussian(), alpha = 1, lambda = make_lambda_sequence(x, y, nlambda = 20L))
   task <- initialize_enfold(x, y) |>
     add_learners(g, lrn_mean("Mean"), glmn) |>
     add_metalearners(mtl_selector("Sel"), mtl_superlearner("SL")) |>

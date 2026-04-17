@@ -369,7 +369,7 @@ make_grid <- function(
 fit.enfold_grid <- function(object, x, y, ...) {
   stop(
     "Cannot call fit() on an enfold_grid directly. ",
-    "Pass it to add_learners() and let fit.enfold_task() handle it.",
+    "Pass it to add_learners() and let fit.enfold_task() with inner_cv non-NA handle it.",
     call. = FALSE
   )
 }

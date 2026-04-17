@@ -731,18 +731,23 @@ lrn_hal <- function(
 #'   custom basis expansion.
 #' @param alpha Numeric in \eqn{[0, 1]}. Elastic net mixing parameter.
 #'   \code{1} (default) = LASSO, \code{0} = ridge.
-#' @param nlambda Integer. Number of \eqn{\lambda} values in the path.
-#'   Default \code{20}.
+#' @param lambda Numeric vector of \eqn{\lambda} values for the regularization
+#'   path, or an \code{enfold_lambda_request} produced by
+#'   \code{\link{make_lambda_sequence}}. Using \code{make_lambda_sequence}
+#'   ensures the same lambda grid is used across all cross-validation folds.
 #' @return An \code{enfold_list} learner (a subclass of
 #'   \code{enfold_learner}) whose \code{predict()} method returns a named
 #'   list with one entry per \eqn{\lambda}.
-#' @seealso \code{\link{lrn_bigGlm}}, \code{\link{lrn_hal}}
+#' @seealso \code{\link{lrn_bigGlm}}, \code{\link{lrn_hal}},
+#'   \code{\link{make_lambda_sequence}}
 #' @examples
 #' \dontrun{
-#' lrn <- lrn_glmnet("en", family = gaussian(), alpha = 0.5)
-#' fitted <- fit(lrn, x = as.matrix(mtcars[, -1]), y = mtcars$mpg)
-#' preds <- predict(fitted, newdata = as.matrix(mtcars[, -1]))
-#' length(preds)  # nlambda entries
+#' x <- as.matrix(mtcars[, -1]); y <- mtcars$mpg
+#' lrn <- lrn_glmnet("en", family = gaussian(), alpha = 0.5,
+#'   lambda = make_lambda_sequence(x, y, nlambda = 50L))
+#' fitted <- fit(lrn, x = x, y = y)
+#' preds <- predict(fitted, newdata = x)
+#' length(preds)  # 50 entries, one per lambda
 #' }
 #' @export
 lrn_glmnet <- function(
@@ -751,7 +756,7 @@ lrn_glmnet <- function(
   offset = NULL,
   frm = NULL,
   alpha = 1,
-  nlambda = 20
+  lambda
 ) {
   .msg_pkg("glmnet")
 
@@ -763,7 +768,9 @@ lrn_glmnet <- function(
     )
   }
 
-  integer_checker(nlambda, "nlambda")
+  if (inherits(lambda, "enfold_lambda_request")) {
+    lambda <- .resolve_lambda_request(lambda, family = family, alpha = alpha, frm = frm, offset = offset)
+  }
 
   make_learner_factory(
     fit = function(x, y) {
@@ -814,7 +821,7 @@ lrn_glmnet <- function(
         family = family,
         alpha = alpha,
         offset = get_offset,
-        nlambda = nlambda,
+        lambda = lambda,
         standardize = FALSE
       )
       do.call(glmnet::glmnet.control, old_controls)
@@ -865,14 +872,14 @@ lrn_glmnet <- function(
         type = "link"
       )
       preds_list <- asplit(pred_mat, 2)
-      names(preds_list) <- as.character(seq_len(ncol(pred_mat)))
+      names(preds_list) <- as.character(object[["model"]]$lambda)
       return(preds_list)
     },
     family,
     offset = NULL,
     frm = NULL,
     alpha = 1,
-    nlambda = 20,
+    lambda,
     expect_list = TRUE
   )(
     name = name,
@@ -880,7 +887,7 @@ lrn_glmnet <- function(
     offset = offset,
     frm = frm,
     alpha = alpha,
-    nlambda = nlambda
+    lambda = lambda
   )
 }
 

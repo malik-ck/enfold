@@ -1,3 +1,4 @@
+- Fitting individual learners
 - Pipelines in enfold
 - Grids in enfold
 - Big data in enfold

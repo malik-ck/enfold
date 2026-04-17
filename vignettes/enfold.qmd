@@ -67,10 +67,10 @@ to monitor glycemic control in people already diagnosed.
 ```{r data}
 data("enfold_demo", package = "enfold")
 
-x <- enfold_demo[, setdiff(names(enfold_demo), "hba1c")]
-y <- enfold_demo$hba1c
+predictors <- enfold_demo[, setdiff(names(enfold_demo), "hba1c")]
+outcome <- enfold_demo$hba1c
 
-cat("Rows:", nrow(x), "| Predictors:", ncol(x), "\n")
+cat("Rows:", nrow(predictors), "| Predictors:", ncol(predictors), "\n")
 ```
 
 Using enfold now consists of five steps. First, we initialize a task by
@@ -111,7 +111,7 @@ also not happen by accident.
 We can afterwards look at the slots inside the task:
 
 ```{r initialize}
-task <- initialize_enfold(x, y)
+task <- initialize_enfold(x = predictors, y = outcome)
 task
 ```
 
@@ -183,7 +183,7 @@ add_learners_with_pipe <- task |>
   )
 
 #...or to do it all in one shot without having an initialization object sitting around idly:
-initialize_and_add_learners <- initialize_enfold(x, y) |>
+initialize_and_add_learners <- initialize_enfold(x = predictors, y = outcome) |>
   add_learners(
     lrn_mean("Mean"),
     lrn_glm("GLM", family = gaussian())
@@ -261,7 +261,7 @@ in `outer_cv`:
 3. the ensemble is built using cross-validated predictions for each learner,
 4. learners are re-trained on the full training set,
 5. ensemble weights and learner predictions are used to generate out-of-fold
-predictions on the outer validation set
+predictions on the outer validation set.
 
 This is repeated for each outer fold, such that each metalearner has fully
 cross-validated predictions that can be used as-is or to compare metalearner performance.
@@ -281,9 +281,9 @@ Alternatively we could build an `enfold_cv` object separately with
 if we want to reuse the same fold splits across multiple tasks.
 
 ```{r folds-reuse, eval = FALSE}
-separate_cv <- create_cv_folds(n = nrow(x), inner_cv = 5L, outer_cv = 5L)
+separate_cv <- create_cv_folds(n = nrow(predictors), inner_cv = 5L, outer_cv = 5L)
 
-task_separate_cv <- initialize_enfold(x, y) |>
+task_separate_cv <- initialize_enfold(x = predictors, y = outcome) |>
   add_cv_folds(cv = separate_cv)
 ```
 
@@ -311,7 +311,7 @@ function we want to use. Then, we simply pass all other arguments required by th
 which will often at least be the number of folds `V`. Lastly, if we have any arguments that
 are vectors of length `n`, we say which they are by passing their names to the `.subset` argument. 
 It is required that the cross-validation function we use has an argument `n`,
-and that we don't pass it ourselves.
+and that we don't pass a value to it ourselves.
 
 The code block below shows how we could do cross-validation,
 stratified by the variable `coronary_heart_disease`. We remove it as a predictor
@@ -322,10 +322,10 @@ and instead pass it as part of our cross-validation instruction:
 chd <- enfold_demo$coronary_heart_disease
 
 # Remove it from our predictors
-x_no_chd <- x[, -which(colnames(enfold_demo) == "coronary_heart_disease")]
+predictors_no_chd <- predictors[, -which(colnames(enfold_demo) == "coronary_heart_disease")]
 
 # Create a new task for illustration that stratifies cross-validation
-task_with_stratified_folds <- initialize_enfold(x_no_chd, y) |>
+task_with_stratified_folds <- initialize_enfold(x = predictors_no_chd, y = outcome) |>
   add_cv_folds(
     inner_cv = make_cv_function(
       origami::make_folds,
@@ -432,14 +432,60 @@ new_preds <- predict(
 )
 ```
 
+## List learners
+
+One key feature of `enfold` is that it can treat the output of one learner as
+multiple valid predictions. This is useful in many settings. A common example
+is fitting elastic nets via `glmnet`: most packages implement elastic nets
+by adding yet another layer of cross-validation to select the optimal regularization
+strength, and the trained learner then uses the single best regularization strength
+to build ensembles. This is somewhat unfortunate: we build ensembles precisely
+to make decisions about which learners can contribute well to our final prediction,
+which means the computational overhead added by pre-selection is not well-spent.
+We might prefer instead to use the entire regularization path to build ensembles,
+which saves computational resources and evaluates regularization strength at the
+actual ensemble building step.
+
+The code block below shows how this works. We use the `lrn_glmnet` template
+and pass a lambda sequence via `make_lambda_sequence()` as the `lambda` argument.
+`make_lambda_sequence()` is designed to be passed directly: it captures the data
+and is resolved by `lrn_glmnet` using the learner's own family, alpha, and formula.
+Both raw data and an `enfold_task` are accepted as the first argument.
+The third argument, `nlambda`, controls how many lambda values to generate
+(default 100). It is good to use a generous `nlambda` since this does not increase
+computational time. We set `inner_cv = NA`, which is how we fit learners that output
+cross-validated predictions without ensembling.
+
+Code block here.
+
+What happens now if we use `predict_learners()` or `loss_learners()`?
+Simple: `enfold` knows that `lrn_glmnet` outputs a list of predictions,
+so it treats each entry as its separate learner. `loss_learners()` can therefore
+tell us what the optimal regularization strength for our data set is:
+
+Code block here.
+
+We can alternatively set `outer_cv = NA`, and enable `inner_cv`.
+While this prevents us from evaluating cross-validated losses along the regularization path, 
+it would build for us ensembles along it to predict on new data.
+If we used `mtl_selector()` as metalearner here, we would emulate what `cv.glmnet`
+does with `s = "lambda.min"`: calling `predict` on the fitted task outputs only 
+the regularization strength deemed optimal.
+
+Code block here.
+
+There are many templates that are or can be list learners. An important example
+besides `lrn_glmnet()` is `lrn_xgboost()`, which can output a list of predictions
+after set numbers of boosting rounds.
+
 ## Advanced functionality
 
 You now know how to fit and evaluate ensembles via the `enfold` package!
-If you want, you can take a deep dive into some of the more advanced
-features the package has. Below we will briefly introduce pipelines and
-grids, which are commonly available in machine learning libraries and
-allow for very flexible modeling. Both of them will also receive
-separate guides that go into more detail for interested users.
+You can now use `enfold` for your own projects, or read the other guides
+to learn about some of the advanced functionality of the package.
+As a little teaser, the rest of this guide will very briefly introduce
+pipelines and grids. Both are of large importance in modern machine learning
+workflows, and both have separate long-form guides for the interested user.
 
 ### Pipelines
 

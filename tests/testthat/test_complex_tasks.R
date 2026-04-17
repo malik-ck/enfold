@@ -260,7 +260,7 @@ test_that("enfold_list works at the end of pipelines", {
       make_pipeline(
         bex_splines("SPL", max_knots = 10),
         bex_interactions("Ints"),
-        lrn_glmnet("GLMN", family = gaussian())
+        lrn_glmnet("GLMN", family = gaussian(), lambda = make_lambda_sequence(x, y, nlambda = 20L))
       )
     ) %>%
     add_metalearners(mtl_superlearner("SL")) %>%
@@ -348,7 +348,7 @@ test_that("risk-set expand/collapse wrapper works with CV", {
   )
   risk_set_glmnet <- wrp_risk_set(
     "RS GLMNET",
-    lrn_glmnet("GLMNET", binomial()),
+    lrn_glmnet("GLMNET", binomial(), lambda = make_lambda_sequence(x[, c("age", "sex")], y, nlambda = 20L)),
     time = "time",
     collapse_back = TRUE
   )
