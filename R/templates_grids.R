@@ -1,4 +1,82 @@
-# ── grd_random ────────────────────────────────────────────────────────────
+# ── make_score ────────────────────────────────────────────────────────────────
+
+#' Bundle a loss function and optional metalearner into a grid scorer
+#'
+#' Creates an \code{enfold_score} object that tells \code{\link{grd_early_stop}}
+#' and \code{\link{grd_bayes}} how to reduce a grid candidate's out-of-fold
+#' predictions to a single scalar. When the candidate produces only one output
+#' stream (e.g. a plain \code{enfold_learner}), \code{metalearner} is not
+#' needed. When the candidate produces multiple streams (e.g. a pipeline with
+#' branching paths or an \code{enfold_list}), \code{metalearner} is required;
+#' no default is applied — a missing metalearner causes an informative error at
+#' evaluation time so the omission is explicit.
+#'
+#' @param loss_function An \code{mtl_loss} object, e.g. \code{loss_gaussian()}.
+#' @param metalearner An \code{enfold_learner} used to combine multiple output
+#'   streams into one prediction before scoring. \code{NULL} (default) is fine
+#'   for single-output candidates; multi-output candidates will error if
+#'   \code{metalearner} is \code{NULL}.
+#' @param higher_is_better Logical. \code{FALSE} (default) means lower scores
+#'   are better (minimising a loss). \code{TRUE} means higher scores are better
+#'   (e.g. a log-likelihood or accuracy).
+#' @return An object of class \code{enfold_score}.
+#' @seealso \code{\link{grd_early_stop}}, \code{\link{grd_bayes}},
+#'   \code{\link{loss_gaussian}}
+#' @examples
+#' # Single-output learner — no metalearner needed
+#' make_score(loss_gaussian())
+#'
+#' # Multi-output pipeline — provide a metalearner to combine paths
+#' make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
+#'
+#' # Higher-is-better score (e.g. negative loss or accuracy)
+#' make_score(loss_gaussian(), higher_is_better = TRUE)
+#' @export
+make_score <- function(loss_function, metalearner = NULL, higher_is_better = FALSE) {
+  if (!inherits(loss_function, "mtl_loss")) {
+    stop(
+      "`loss_function` must be an `mtl_loss` object (e.g. `loss_gaussian()`).",
+      call. = FALSE
+    )
+  }
+  if (
+    !is.null(metalearner) &&
+      !inherits(metalearner, c("enfold_learner", "enfold_pipeline", "enfold_list"))
+  ) {
+    stop(
+      "`metalearner` must be an `enfold_learner`, `enfold_pipeline`, or `enfold_list` (or NULL).",
+      call. = FALSE
+    )
+  }
+  if (
+    !is.logical(higher_is_better) ||
+      length(higher_is_better) != 1L ||
+      is.na(higher_is_better)
+  ) {
+    stop("`higher_is_better` must be TRUE or FALSE.", call. = FALSE)
+  }
+  structure(
+    list(
+      loss_function    = loss_function,
+      metalearner      = metalearner,
+      higher_is_better = higher_is_better
+    ),
+    class = "enfold_score"
+  )
+}
+
+#' @export
+print.enfold_score <- function(x, ...) {
+  cat(sprintf(
+    "enfold_score | %s | metalearner: %s\n",
+    if (x$higher_is_better) "higher is better" else "lower is better",
+    if (is.null(x$metalearner)) "none" else x$metalearner$name
+  ))
+  invisible(x)
+}
+
+
+# ── grd_random ────────────────────────────────────────────────────────────────
 
 #' Random hyperparameter search grid constructor
 #'
@@ -107,7 +185,7 @@ grd_random <- make_grid_factory(
 )
 
 
-# ── grd_early_stop ────────────────────────────────────────────────────────
+# ── grd_early_stop ────────────────────────────────────────────────────────────
 
 #' Early-stopping hyperparameter search grid constructor
 #'
@@ -128,30 +206,51 @@ grd_random <- make_grid_factory(
 #' @param n_early_stop Integer. Consecutive evaluations without relative
 #'   improvement of at least \code{tol} before stopping. Default \code{10L}.
 #' @param tol Numeric. Relative improvement threshold. Default \code{0.01}.
-#' @param loss_fun An \code{mtl_loss} object (e.g. \code{loss_gaussian()})
-#'   used to compute candidate loss from out-of-fold predictions.
+#' @param score An \code{enfold_score} object from \code{\link{make_score}}
+#'   specifying the loss function, an optional metalearner for multi-output
+#'   candidates, and the optimisation direction. Default
+#'   \code{make_score(loss_gaussian())}.
 #' @param directory \code{NULL} for a plain learner, or a character vector
 #'   naming the target node inside a pipeline.
 #' @return An \code{enfold_grid} object.
-#' @seealso \code{\link{make_grid_factory}}, \code{\link{grd_random}},
-#'   \code{\link{grd_bayes}}
+#' @seealso \code{\link{make_grid_factory}}, \code{\link{make_score}},
+#'   \code{\link{grd_random}}, \code{\link{grd_bayes}}
 #' @examples
 #' \dontrun{
 #' params <- specify_hyperparameters(num.trees = c(100L, 200L, 500L))
 #' grid   <- grd_early_stop("rf", lrn_ranger("rf"), params, n_early_stop = 2L)
+#'
+#' # Pipeline with branching paths: supply a metalearner to combine them
+#' pipe   <- make_pipeline(some_screener, list(lrn_glm("glm", gaussian()), lrn_mean("mean")))
+#' params <- specify_hyperparameters(threshold = c(5L, 10L, 20L))
+#' grid   <- grd_early_stop(
+#'   "pipe_grid", pipe, params,
+#'   score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
+#' )
 #' }
 #' @export
 grd_early_stop <- make_grid_factory(
   search = function(hyperparams, name_prefix, learner_object, directory, x, y, folds) {
+    if (inherits(score, "mtl_loss")) {
+      stop(
+        "`score` must be an `enfold_score` object, not an `mtl_loss`. ",
+        "Wrap your loss function: `make_score(your_loss_fun)`.",
+        call. = FALSE
+      )
+    }
+    if (!inherits(score, "enfold_score")) {
+      stop(
+        "`score` must be an `enfold_score` object from `make_score()`.",
+        call. = FALSE
+      )
+    }
+
     if (!is.null(max_candidates)) {
       max_candidates <- integer_checker(max_candidates, "max_candidates", return = TRUE)
     }
     n_early_stop <- integer_checker(n_early_stop, "n_early_stop", return = TRUE)
     if (!is.numeric(tol) || length(tol) != 1L || tol < 0) {
       stop("`tol` must be a single non-negative number.", call. = FALSE)
-    }
-    if (!inherits(loss_fun, "mtl_loss")) {
-      stop("`loss_fun` must be a loss object created by loss_*().", call. = FALSE)
     }
 
     if (!is.null(seed)) set.seed(seed)
@@ -176,7 +275,7 @@ grd_early_stop <- make_grid_factory(
       function(i) as.list(combo_df[i, , drop = FALSE])
     )
 
-    best_loss <- Inf
+    best_score <- if (score$higher_is_better) -Inf else Inf
     no_improve <- 0L
     results <- list()
 
@@ -205,26 +304,26 @@ grd_early_stop <- make_grid_factory(
       )
       if (is.null(contrib) || !is.null(attr(contrib, "failed_learner"))) next
 
-      p <- extract_best_preds_for_loss(contrib, y, loss_fun)
-      idx <- attr(p, "indices")
-      loss <- mean(compute_loss(loss_fun, subset_y(y, idx), p))
+      scalar <- evaluate_score(score, contrib, y)
 
-      if (!is.numeric(loss) || length(loss) != 1L || is.na(loss)) {
+      if (!is.numeric(scalar) || length(scalar) != 1L || is.na(scalar)) {
         stop(
-          "grd_early_stop requires a scalar numeric loss from `loss_fun`. ",
-          "Check that `loss_fun` is compatible with the learner output.",
+          "grd_early_stop: `score` produced a non-scalar result. ",
+          "Check that `score` is compatible with the learner output.",
           call. = FALSE
         )
       }
 
-      improved <- if (is.infinite(best_loss)) {
+      improved <- if (is.infinite(best_score)) {
         TRUE
+      } else if (score$higher_is_better) {
+        (scalar - best_score) / (abs(best_score) + 1e-15) >= tol
       } else {
-        best_loss > 0 && (best_loss - loss) / best_loss >= tol
+        (best_score - scalar) / (abs(best_score) + 1e-15) >= tol
       }
 
       if (improved) {
-        best_loss <- loss
+        best_score <- scalar
         no_improve <- 0L
       } else {
         no_improve <- no_improve + 1L
@@ -241,11 +340,11 @@ grd_early_stop <- make_grid_factory(
   max_candidates = NULL,
   n_early_stop = 10L,
   tol = 0.01,
-  loss_fun = loss_gaussian()
+  score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 )
 
 
-# ── grd_bayes ─────────────────────────────────────────────────────────────
+# ── grd_bayes ─────────────────────────────────────────────────────────────────
 
 #' Bayesian hyperparameter search grid constructor
 #'
@@ -262,13 +361,10 @@ grd_early_stop <- make_grid_factory(
 #'   Bayesian updating begins. Default \code{5L}.
 #' @param n_iter Integer. Number of Bayesian optimisation iterations after
 #'   the random phase. Default \code{10L}.
-#' @param score_fn A \code{function(result, y) -> numeric(1)} that extracts a
-#'   scalar score (higher is better) from a candidate result. \code{result}
-#'   carries fields \code{$name} (learner name string), \code{$combo} (named
-#'   list of hyperparameter values), and \code{$contrib} (named list of
-#'   out-of-fold predictions, one entry per terminal output, each with
-#'   \code{attr(., "indices")} carrying the corresponding row indices).
-#'   \code{y} is the full outcome vector or matrix passed to the grid search.
+#' @param score An \code{enfold_score} object from \code{\link{make_score}}
+#'   specifying the loss function, an optional metalearner for multi-output
+#'   candidates, and the optimisation direction. Required; no default is
+#'   provided.
 #' @param seed Integer or \code{NULL}. Passed to \code{set.seed()} before
 #'   the optimisation run.
 #' @param directory \code{NULL} for a plain learner, or a character vector
@@ -278,25 +374,39 @@ grd_early_stop <- make_grid_factory(
 #' Requires the \pkg{rBayesianOptimization} package. Discrete parameter
 #' vectors are not supported; define all ranges as \code{enfold_range}
 #' objects via \code{\link{make_range}}.
-#' @seealso \code{\link{make_grid_factory}}, \code{\link{grd_random}},
-#'   \code{\link{grd_early_stop}}
+#' @seealso \code{\link{make_grid_factory}}, \code{\link{make_score}},
+#'   \code{\link{grd_random}}, \code{\link{grd_early_stop}}
 #' @examples
 #' \dontrun{
 #' params <- specify_hyperparameters(lambda = make_range(1e-4, 10))
 #' grid   <- grd_bayes(
 #'   "en", lrn_glmnet("en", gaussian()), params,
-#'   n_init   = 3L,
-#'   n_iter   = 7L,
-#'   score_fn = function(result, y) {
-#'     p   <- result$contrib[[1L]]
-#'     idx <- attr(p, "indices")
-#'     -mean((p - y[idx])^2)
-#'   }
+#'   score = make_score(loss_gaussian())
+#' )
+#'
+#' # Multi-output pipeline: supply a metalearner
+#' grid <- grd_bayes(
+#'   "pipe", my_pipeline, params,
+#'   score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 #' )
 #' }
 #' @export
 grd_bayes <- make_grid_factory(
   search = function(hyperparams, name_prefix, learner_object, directory, x, y, folds) {
+    if (inherits(score, "mtl_loss")) {
+      stop(
+        "`score` must be an `enfold_score` object, not an `mtl_loss`. ",
+        "Wrap your loss function: `make_score(your_loss_fun)`.",
+        call. = FALSE
+      )
+    }
+    if (!inherits(score, "enfold_score")) {
+      stop(
+        "`score` must be an `enfold_score` object from `make_score()`.",
+        call. = FALSE
+      )
+    }
+
     not_range <- !vapply(hyperparams, inherits, logical(1L), "enfold_range")
     if (any(not_range)) {
       stop(
@@ -322,9 +432,6 @@ grd_bayes <- make_grid_factory(
 
     bounds <- lapply(hyperparams, function(p) c(p$min, p$max))
 
-    results_env <- new.env(parent = emptyenv())
-    results_env$collected <- list()
-
     bayes_fn <- function(...) {
       combo <- list(...)
       nm <- make_combo_name(name_prefix, combo)
@@ -340,13 +447,11 @@ grd_bayes <- make_grid_factory(
       if (is.null(contrib) || !is.null(attr(contrib, "failed_learner"))) {
         return(list(Score = -Inf))
       }
-      result <- list(name = nm, combo = combo, contrib = contrib)
-      score <- score_fn(result, y)
-      results_env$collected <- c(results_env$collected, list(result))
-      list(Score = score)
+      scalar <- evaluate_score(score, contrib, y)
+      list(Score = if (score$higher_is_better) scalar else -scalar)
     }
 
-    rBayesianOptimization::BayesianOptimization(
+    opt <- rBayesianOptimization::BayesianOptimization(
       FUN = bayes_fn,
       bounds = bounds,
       init_points = as.integer(n_init),
@@ -354,26 +459,42 @@ grd_bayes <- make_grid_factory(
       verbose = FALSE
     )
 
-    results_env$collected
+    best_combo <- as.list(opt$Best_Par)
+    best_nm    <- make_combo_name(name_prefix, best_combo)
+    best_mod   <- change_arguments(learner_object, directory, best_combo, name = best_nm)
+    best_contrib <- cv_fit(best_mod, folds, x, y)
+
+    list(list(name = best_nm, combo = best_combo, contrib = best_contrib))
   },
   n_init = 5L,
   n_iter = 10L,
-  score_fn,
+  score,
   seed = NULL
 )
 
 
-# ── Internal helpers ───────────────────────────────────────────────────────
+# ── Internal helpers ───────────────────────────────────────────────────────────
 
-# For early-stopping search engines that need a scalar loss: pick the single
-# prediction stream most representative of the candidate.
-# Single-output contrib -> contrib[[1]].
-# Multi-output -> the stream with the lowest mean loss under loss_fun.
-extract_best_preds_for_loss <- function(contrib, y, loss_fun) {
-  if (length(contrib) == 1L) return(contrib[[1L]])
-  losses <- vapply(contrib, function(p) {
+# Apply an enfold_score to a named list of out-of-fold predictions (contrib)
+# and return a scalar mean loss. For single-output contrib, scores directly.
+# For multi-output contrib, requires score$metalearner — errors if NULL.
+evaluate_score <- function(score, contrib, y) {
+  if (length(contrib) == 1L) {
+    p   <- contrib[[1L]]
     idx <- attr(p, "indices")
-    mean(compute_loss(loss_fun, subset_y(y, idx), p))
-  }, numeric(1L))
-  contrib[[which.min(losses)]]
+    return(mean(score$loss_function$loss_fun(subset_y(y, idx), p)))
+  }
+  if (is.null(score$metalearner)) {
+    stop(
+      "The grid candidate produced ", length(contrib), " output stream(s) but ",
+      "`score$metalearner` is NULL. ",
+      "Provide a metalearner in make_score() to combine multi-output candidates.",
+      call. = FALSE
+    )
+  }
+  idx       <- attr(contrib[[1L]], "indices")
+  y_sub     <- structure(subset_y(y, idx), indices = idx)
+  fitted_mtl <- fit(score$metalearner, x = contrib, y = y_sub)
+  preds     <- stats::predict(fitted_mtl, contrib)
+  mean(score$loss_function$loss_fun(subset_y(y, idx), preds))
 }

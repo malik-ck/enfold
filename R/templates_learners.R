@@ -534,7 +534,8 @@ lrn_mboost <- function(
 #'   Default \code{1}.
 #' @param num_knots Integer. Number of knots per basis function. Default
 #'   \code{50}.
-#' @return An \code{enfold_learner} object.
+#' @return An \code{enfold_list} object. Fitting it
+#' creates 100 learners, one for each value of \eqn{\lambda} in the regularization path.
 #' @seealso \code{\link{lrn_glmnet}}, \code{\link{lrn_glm}}
 #' @examples
 #' \dontrun{
@@ -614,7 +615,10 @@ lrn_hal <- function(
       )
       x <- sweep(x, 2, flex_list[["rescale"]][["means"]], "-")
       x <- sweep(x, 2, flex_list[["rescale"]][["sds"]], "/")
+
       # Can now fit!
+      old_controls <- glmnet::glmnet.control()
+      glmnet::glmnet.control(fdev = 0)
       get_model <- hal9001::fit_hal(
         x,
         y,
@@ -622,8 +626,12 @@ lrn_hal <- function(
         offset = get_offset,
         max_degree = max_degree,
         smoothness_orders = smoothness_orders,
-        num_knots = num_knots
+        num_knots = num_knots,
+        fit_control = list(cv_select = FALSE)
       )
+
+      do.call(glmnet::glmnet.control, old_controls)
+
       return(list(
         model = get_model,
         instructions = instr_list,
@@ -671,13 +679,22 @@ lrn_hal <- function(
       get_sds <- object[["flexibility"]][["rescale"]][["sds"]]
       data <- sweep(data, 2, get_means, "-")
       data <- sweep(data, 2, get_sds, "/")
+
       # Can now output
-      return(as.vector(stats::predict(
-        object[["model"]],
-        new_data = data,
-        type = "response",
-        newoffset = get_offset
-      )))
+
+      preds_mat <- matrix(
+        stats::predict(
+          object[["model"]],
+          new_data = data,
+          type = "response",
+          newoffset = get_offset
+        ),
+        ncol = 100
+      )
+
+      preds_list <- asplit(preds_mat, 2)
+      names(preds_list) <- as.character(seq_len(ncol(preds_mat)))
+      return(preds_list)
     },
     family,
     offset = NULL,

@@ -255,7 +255,7 @@ fit_ensemble <- function(x, y, perf_folds, learners, future_pkgs) {
     function(fold) {
       tr <- training_set(fold)
       lapply(learners, function(lrn) {
-        fit(lrn, x[tr, , drop = FALSE], subset_y(y, tr))
+        fit(lrn, subset_x(x, tr), subset_y(y, tr))
       })
     },
     future.packages = future_pkgs,
@@ -264,6 +264,7 @@ fit_ensemble <- function(x, y, perf_folds, learners, future_pkgs) {
       y = y,
       learners = learners,
       subset_y = subset_y,
+      subset_x = subset_x,
       training_set = training_set,
       `training_set.enfold_fold` = training_set.enfold_fold
     ),
@@ -363,6 +364,7 @@ build_ensembles <- function(
       metalearners = metalearners,
       combine_preds = combine_preds,
       subset_y = subset_y,
+      subset_x = subset_x,
       get_lrn_display_name = get_lrn_display_name,
       fit_predict_folds = fit_predict_folds,
       training_set = training_set,

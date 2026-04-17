@@ -13,7 +13,7 @@ grd_early_stop(
   max_candidates = NULL,
   n_early_stop = 10L,
   tol = 0.01,
-  loss_fun = loss_gaussian()
+  score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 )
 }
 \arguments{
@@ -39,8 +39,10 @@ improvement of at least \code{tol} before stopping. Default \code{10L}.}
 
 \item{tol}{Numeric. Relative improvement threshold. Default \code{0.01}.}
 
-\item{loss_fun}{An \code{mtl_loss} object (e.g. \code{loss_gaussian()})
-used to compute candidate loss from out-of-fold predictions.}
+\item{score}{An \code{enfold_score} object from \code{\link{make_score}}
+specifying the loss function, an optional metalearner for multi-output
+candidates, and the optimisation direction. Default
+\code{make_score(loss_gaussian())}.}
 }
 \value{
 An \code{enfold_grid} object.
@@ -55,9 +57,17 @@ when no meaningful improvement has been observed for
 \dontrun{
 params <- specify_hyperparameters(num.trees = c(100L, 200L, 500L))
 grid   <- grd_early_stop("rf", lrn_ranger("rf"), params, n_early_stop = 2L)
+
+# Pipeline with branching paths: supply a metalearner to combine them
+pipe   <- make_pipeline(some_screener, list(lrn_glm("glm", gaussian()), lrn_mean("mean")))
+params <- specify_hyperparameters(threshold = c(5L, 10L, 20L))
+grid   <- grd_early_stop(
+  "pipe_grid", pipe, params,
+  score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
+)
 }
 }
 \seealso{
-\code{\link{make_grid_factory}}, \code{\link{grd_random}},
-\code{\link{grd_bayes}}
+\code{\link{make_grid_factory}}, \code{\link{make_score}},
+\code{\link{grd_random}}, \code{\link{grd_bayes}}
 }

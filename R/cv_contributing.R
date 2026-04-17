@@ -144,9 +144,9 @@ fit_predict_folds <- function(learner, folds, x, y, lrn_nm) {
     fold <- folds[[k]]
     tr <- training_set(fold)
     val <- validation_set(fold)
-    x_tr <- x[tr, , drop = FALSE]
+    x_tr <- subset_x(x, tr)
     y_tr <- subset_y(y, tr)
-    x_val <- x[val, , drop = FALSE]
+    x_val <- subset_x(x, val)
     tryCatch(
       {
         f <- fit(learner, x_tr, y_tr)

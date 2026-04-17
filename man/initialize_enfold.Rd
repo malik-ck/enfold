@@ -7,8 +7,10 @@
 initialize_enfold(x, y)
 }
 \arguments{
-\item{x}{A data frame or matrix (or an object inheriting from either) of
-predictor variables.}
+\item{x}{A data frame, matrix, \code{arrow::Table}, \code{FBM} (from
+\pkg{bigstatsr}), or a length-1 character path to a Feather / Arrow IPC
+file. Feather paths are opened as memory-mapped tables so that only the
+requested rows are read into memory inside each fold loop.}
 
 \item{y}{A vector or matrix (or an object inheriting from either) of outcome
 values. Must have the same number of rows (or elements) as \code{x}.}

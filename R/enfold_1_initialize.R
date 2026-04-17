@@ -6,8 +6,10 @@
 #' \code{\link{add_cv_folds}}, respectively. The task is then fitted via
 #' \code{\link{fit.enfold_task}}.
 #'
-#' @param x A data frame or matrix (or an object inheriting from either) of
-#'   predictor variables.
+#' @param x A data frame, matrix, \code{arrow::Table}, \code{FBM} (from
+#'   \pkg{bigstatsr}), or a length-1 character path to a Feather / Arrow IPC
+#'   file. Feather paths are opened as memory-mapped tables so that only the
+#'   requested rows are read into memory inside each fold loop.
 #' @param y A vector or matrix (or an object inheriting from either) of outcome
 #'   values. Must have the same number of rows (or elements) as \code{x}.
 #' @return An object of class \code{enfold_task}.
@@ -20,9 +22,23 @@
 #' task <- initialize_enfold(x, y)
 #' task
 initialize_enfold <- function(x, y) {
-  # Validate inputs
-  if (!is.matrix(x) && !is.data.frame(x)) {
-    stop("`x` must be a data frame or matrix.")
+  # Convert file path to an enfold_arrow_file reference (validates + caches nrow)
+  if (is.character(x) && length(x) == 1L) {
+    x <- new_arrow_file(x)
+  }
+
+  # Validate x type
+  is_big_x <- inherits(x, c("ArrowTabular", "enfold_arrow_file", "FBM"))
+
+  if (!is.matrix(x) && !is.data.frame(x) && !is_big_x) {
+    stop(
+      "`x` must be a data frame, matrix, Arrow Table, Arrow IPC file path, or FBM.",
+      call. = FALSE
+    )
+  }
+
+  if (is.matrix(x) && !is.numeric(x)) {
+    stop("If `x` is a matrix, it must be numeric.", call. = FALSE)
   }
 
   if (!is.matrix(y) && !is.data.frame(y) && !is.vector(y)) {
@@ -52,7 +68,7 @@ initialize_enfold <- function(x, y) {
       # Also the ones initialized as NULL
       learners = NULL,
       metalearners = NULL,
-      future_pkgs = NULL,
+      future_pkgs = detect_x_pkgs(x),
       cv = NULL,
       is_cv_ensemble = NULL,
       fit_objects = NULL,

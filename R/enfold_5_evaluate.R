@@ -187,7 +187,7 @@ risk <- function(object, ...) UseMethod("risk")
 #' @param type Character. One of \code{"cv"} or \code{"ensemble"}.
 #' @param ... Ignored.
 #' @return A named numeric vector of mean losses, one per metalearner.
-#' @seealso \code{\link{fold_risk}}, \code{\link{cv_loss}},
+#' @seealso \code{\link{fold_risk}}, \code{\link{loss.enfold_task_fitted}},
 #'   \code{\link{loss_gaussian}}, \code{\link{loss_custom}},
 #'   \code{\link{predict.enfold_task_fitted}}
 #' @examples
@@ -261,7 +261,7 @@ risk.enfold_task_fitted <- function(
 #' @return A numeric matrix with rows corresponding to outer folds
 #'   (\code{"fold_1"}, \code{"fold_2"}, ...) and columns corresponding to
 #'   metalearners. Each cell is the mean loss on that fold's validation set.
-#' @seealso \code{\link{risk.enfold_task_fitted}}, \code{\link{cv_loss}}
+#' @seealso \code{\link{risk.enfold_task_fitted}}, \code{\link{loss.enfold_task_fitted}},
 #' @examples
 #' \dontrun{
 #' x <- mtcars[, -1]; y <- mtcars$mpg
@@ -318,31 +318,50 @@ fold_risk <- function(object, loss_fun, metalearner_name = NULL, ...) {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# cv_loss
+# loss
 # ══════════════════════════════════════════════════════════════════════════════
 
-#' Cross-validated per-observation loss
+#' Compute per-observation loss for a fitted enfold task
 #'
-#' Returns a data frame of per-observation losses for each metalearner using
-#' cross-validated (out-of-fold) predictions. Unlike \code{\link{risk}}, which
-#' returns a single mean per metalearner, this function preserves the
-#' observation-level detail so that you can plot loss distributions, inspect
-#' high-error observations, or compute weighted risks.
+#' Generic that dispatches to \code{\link{loss.enfold_task_fitted}}.
 #'
-#' @param object An \code{enfold_task_fitted} object with outer CV (fitted with
-#'   a non-\code{NULL} \code{outer_cv}).
+#' @param object An object of class \code{enfold_task_fitted}.
+#' @param ... Further arguments passed to the method.
+#' @return A \code{data.frame} with one row per observation and one column per
+#'   metalearner, plus a leading \code{.index} column.
+#' @seealso \code{\link{loss.enfold_task_fitted}}, \code{\link{risk}},
+#'   \code{\link{fold_risk}}, \code{\link{loss_gaussian}}, \code{\link{loss_custom}}
+#' @export
+loss <- function(object, ...) UseMethod("loss")
+
+#' Compute per-observation loss for a fitted enfold task
+#'
+#' Returns a data frame of per-observation losses for each metalearner.
+#' Unlike \code{\link{risk}}, which returns a single mean per metalearner,
+#' this function preserves observation-level detail so that you can plot loss
+#' distributions, inspect high-error observations, or compute weighted risks.
+#' This function has the same signature as \code{\link{risk.enfold_task_fitted}}.
+#'
+#' @param object An \code{enfold_task_fitted} object.
 #' @param loss_fun An \code{mtl_loss} object created by
 #'   \code{\link{loss_gaussian}}, \code{\link{loss_logistic}},
 #'   \code{\link{loss_poisson}}, \code{\link{loss_gamma}}, or
 #'   \code{\link{loss_custom}}.
+#' @param newdata Optional predictor data. Defaults to the stored training
+#'   data.
 #' @param metalearner_name Character vector of metalearner names to evaluate.
 #'   \code{NULL} (default) uses all metalearners.
+#' @param ensemble_fold_id Integer. For \code{type = "ensemble"} with outer
+#'   CV, selects which fold's ensemble to evaluate.
+#' @param type Character. One of \code{"cv"} or \code{"ensemble"}.
+#'   \code{"cv"} requires outer CV (\code{outer_cv} non-\code{NULL}).
 #' @param ... Ignored.
-#' @return A \code{data.frame} with one row per training observation and one
-#'   column per metalearner, plus a leading \code{.index} column giving the
-#'   original row position in the training data.
+#' @return A \code{data.frame} with one row per observation and one column per
+#'   metalearner, plus a leading \code{.index} column giving the original row
+#'   position in the training data.
 #' @seealso \code{\link{risk.enfold_task_fitted}}, \code{\link{fold_risk}},
-#'   \code{\link{loss_gaussian}}, \code{\link{loss_custom}}
+#'   \code{\link{loss_learners}}, \code{\link{loss_gaussian}},
+#'   \code{\link{loss_custom}}
 #' @examples
 #' \dontrun{
 #' x <- mtcars[, -1]; y <- mtcars$mpg
@@ -352,49 +371,57 @@ fold_risk <- function(object, loss_fun, metalearner_name = NULL, ...) {
 #'   add_cv_folds(inner_cv = 5L, outer_cv = 3L) |>
 #'   fit()
 #'
-#' df <- cv_loss(task, loss_fun = loss_gaussian())
+#' df <- loss(task, loss_fun = loss_gaussian(), type = "cv")
 #' # df has columns: .index, selector
 #' }
 #' @export
-cv_loss <- function(object, loss_fun, metalearner_name = NULL, ...) {
-  if (!inherits(object, "enfold_task_fitted")) {
-    stop("`object` must be an enfold_task_fitted.", call. = FALSE)
-  }
-  if (!object$is_cv_ensemble) {
+loss.enfold_task_fitted <- function(
+  object,
+  loss_fun,
+  newdata          = NULL,
+  metalearner_name = NULL,
+  ensemble_fold_id = NULL,
+  type             = NULL,
+  ...
+) {
+  if (is.null(type)) {
     stop(
-      "cv_loss() requires outer CV. Refit with a non-NULL `outer_cv`.",
+      "Please provide `type`: 'cv' for cross-validated per-observation losses or ",
+      "'ensemble' for ensemble per-observation losses.",
       call. = FALSE
     )
   }
+  type      <- match.arg(type, c("cv", "ensemble"))
   loss_fun  <- validate_loss_fun(loss_fun)
   use_names <- resolve_metalearner_names(object, metalearner_name)
+  y         <- object$y_env$y
 
-  y <- object$y_env$y
-
-  cv_preds <- suppressWarnings(stats::predict(
+  preds_all <- suppressWarnings(stats::predict(
     object           = object,
-    newdata          = NULL,
+    newdata          = newdata,
     metalearner_name = use_names,
-    type             = "cv"
+    ensemble_fold_id = ensemble_fold_id,
+    type             = type
   ))
 
   # Normalise to named list
-  if (!is.list(cv_preds) || !is.null(attr(cv_preds, "indices"))) {
-    cv_preds <- stats::setNames(list(cv_preds), use_names[[1L]])
+  if (!is.list(preds_all) || !is.null(attr(preds_all, "indices"))) {
+    preds_all <- stats::setNames(list(preds_all), use_names[[1L]])
   }
 
-  cols <- lapply(use_names, function(nm) {
-    preds   <- cv_preds[[nm]]
-    idx     <- attr(preds, "indices")
-    y_use   <- if (!is.null(idx)) subset_y(y, idx) else y
-    list(idx = idx, obs_loss = loss_fun$loss_fun(y_use, preds))
-  })
-  names(cols) <- use_names
+  first_preds <- preds_all[[1L]]
+  idx_vec     <- attr(first_preds, "indices")
 
-  idx_vec <- cols[[1L]]$idx
-  out <- data.frame(.index = idx_vec, stringsAsFactors = FALSE)
+  out <- data.frame(
+    .index           = if (!is.null(idx_vec)) idx_vec else seq_len(NROW(first_preds)),
+    stringsAsFactors = FALSE
+  )
+
   for (nm in use_names) {
-    out[[nm]] <- cols[[nm]]$obs_loss
+    preds     <- preds_all[[nm]]
+    idx       <- attr(preds, "indices")
+    y_use     <- if (!is.null(idx)) subset_y(y, idx) else y
+    out[[nm]] <- loss_fun$loss_fun(y_use, preds)
   }
 
   out
@@ -535,6 +562,78 @@ risk_learners <- function(
     y_use <- if (!is.null(idx)) subset_y(y, idx) else y
     mean(loss_fun$loss_fun(y_use, p))
   }, numeric(1L))
+}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# loss_learners
+# ══════════════════════════════════════════════════════════════════════════════
+
+#' Compute per-observation loss for individual base learners
+#'
+#' Returns a data frame of per-observation losses for each fitted base learner
+#' (not metalearner). Where \code{\link{risk_learners}} returns a single mean
+#' per learner, this function preserves observation-level detail. Wraps
+#' \code{\link{predict_learners}} and applies the provided loss function.
+#'
+#' @param object An \code{enfold_task_fitted} object.
+#' @param loss_fun An \code{mtl_loss} object created by
+#'   \code{\link{loss_gaussian}}, \code{\link{loss_logistic}},
+#'   \code{\link{loss_poisson}}, \code{\link{loss_gamma}}, or
+#'   \code{\link{loss_custom}}.
+#' @param type Character. Either \code{"cv"} or \code{"ensemble"}.
+#' @param fold_id Integer. For \code{type = "ensemble"}, selects which outer
+#'   fold's fitted learners to use. Defaults to \code{1L}.
+#' @param ... Ignored.
+#' @return A \code{data.frame} with one row per observation and one column per
+#'   learner/path/grid entry, plus a leading \code{.index} column giving the
+#'   original row position in the training data.
+#' @seealso \code{\link{risk_learners}}, \code{\link{loss.enfold_task_fitted}},
+#'   \code{\link{predict_learners}}
+#' @examples
+#' \dontrun{
+#' x <- mtcars[, -1]; y <- mtcars$mpg
+#' task <- initialize_enfold(x, y) |>
+#'   add_learners(lrn_glm("glm", family = gaussian()), lrn_mean("mean")) |>
+#'   add_metalearners(mtl_selector("selector")) |>
+#'   add_cv_folds(inner_cv = 5L, outer_cv = 3L) |>
+#'   fit()
+#'
+#' loss_learners(task, loss_fun = loss_gaussian(), type = "cv")
+#' }
+#' @export
+loss_learners <- function(
+  object,
+  loss_fun,
+  type    = c("cv", "ensemble"),
+  fold_id = NULL,
+  ...
+) {
+  if (!inherits(object, "enfold_task_fitted")) {
+    stop("`object` must be an enfold_task_fitted.", call. = FALSE)
+  }
+  type     <- match.arg(type)
+  loss_fun <- validate_loss_fun(loss_fun)
+  y        <- object$y_env$y
+
+  preds <- predict_learners(object, newdata = NULL, type = type, fold_id = fold_id)
+
+  first   <- preds[[1L]]
+  idx_vec <- attr(first, "indices")
+
+  out <- data.frame(
+    .index           = if (!is.null(idx_vec)) idx_vec else seq_len(NROW(first)),
+    stringsAsFactors = FALSE
+  )
+
+  for (nm in names(preds)) {
+    p         <- preds[[nm]]
+    idx       <- attr(p, "indices")
+    y_use     <- if (!is.null(idx)) subset_y(y, idx) else y
+    out[[nm]] <- loss_fun$loss_fun(y_use, p)
+  }
+
+  out
 }
 
 

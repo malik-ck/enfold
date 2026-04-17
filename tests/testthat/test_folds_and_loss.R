@@ -293,7 +293,7 @@ test_that("risk(type='cv') equals fold-size-weighted mean of fold_risk()", {
 
 
 ## ============================================================================
-## 7.  fold_risk, cv_loss, predict_learners, risk_learners
+## 7.  fold_risk, loss, predict_learners, risk_learners, loss_learners
 ## ============================================================================
 
 test_that("fold_risk() returns a folds x metalearners numeric matrix", {
@@ -332,14 +332,23 @@ test_that("fold_risk() respects metalearner_name subsetting", {
   expect_equal(colnames(fr), "Sel")
 })
 
-test_that("cv_loss() returns a data frame with .index and metalearner columns", {
+test_that("loss() errors without type", {
+  task <- initialize_enfold(x, y) |>
+    add_learners(lrn_mean("Mean")) |>
+    add_metalearners(mtl_selector("Sel")) |>
+    add_cv_folds(inner_cv = 3L, outer_cv = NA)
+  fitted <- fit(task)
+  expect_error(loss(fitted, loss_fun = loss_gaussian()), "type")
+})
+
+test_that("loss(type='cv') returns a data frame with .index and metalearner columns", {
   task <- initialize_enfold(x, y) |>
     add_learners(lrn_mean("Mean"), lrn_glm("GLM", family = gaussian())) |>
     add_metalearners(mtl_selector("Sel")) |>
     add_cv_folds(inner_cv = 3L, outer_cv = 3L)
   fitted <- fit(task)
 
-  df <- cv_loss(fitted, loss_fun = loss_gaussian())
+  df <- loss(fitted, loss_fun = loss_gaussian(), type = "cv")
   expect_true(is.data.frame(df))
   expect_equal(nrow(df), n)
   expect_true(".index" %in% names(df))
@@ -347,13 +356,40 @@ test_that("cv_loss() returns a data frame with .index and metalearner columns", 
   expect_true(all(df$Sel >= 0))
 })
 
-test_that("cv_loss() requires outer CV", {
+test_that("loss(type='cv') requires outer CV", {
   task <- initialize_enfold(x, y) |>
     add_learners(lrn_mean("Mean")) |>
     add_metalearners(mtl_selector("Sel")) |>
     add_cv_folds(inner_cv = 3L, outer_cv = NA)
   fitted <- fit(task)
-  expect_error(cv_loss(fitted, loss_fun = loss_gaussian()), "outer CV")
+  expect_error(loss(fitted, loss_fun = loss_gaussian(), type = "cv"), "outer CV")
+})
+
+test_that("loss(type='ensemble') returns data frame without requiring outer CV", {
+  task <- initialize_enfold(x, y) |>
+    add_learners(lrn_mean("Mean"), lrn_glm("GLM", family = gaussian())) |>
+    add_metalearners(mtl_selector("Sel")) |>
+    add_cv_folds(inner_cv = 3L, outer_cv = NA)
+  fitted <- fit(task)
+
+  df <- loss(fitted, loss_fun = loss_gaussian(), type = "ensemble")
+  expect_true(is.data.frame(df))
+  expect_equal(nrow(df), n)
+  expect_true(".index" %in% names(df))
+  expect_true("Sel" %in% names(df))
+  expect_true(all(df$Sel >= 0))
+})
+
+test_that("colMeans of loss(type='cv') equals risk(type='cv')", {
+  task <- initialize_enfold(x, y) |>
+    add_learners(lrn_mean("Mean"), lrn_glm("GLM", family = gaussian())) |>
+    add_metalearners(mtl_selector("Sel")) |>
+    add_cv_folds(inner_cv = 3L, outer_cv = 3L)
+  fitted <- fit(task)
+
+  df <- loss(fitted, loss_fun = loss_gaussian(), type = "cv")
+  r  <- risk(fitted, loss_fun = loss_gaussian(), type = "cv")
+  expect_equal(colMeans(df[, "Sel", drop = FALSE]), r["Sel"], tolerance = 1e-12)
 })
 
 test_that("predict_learners(type='ensemble') returns named list of learner predictions", {
@@ -429,6 +465,48 @@ test_that("risk_learners() is consistent with manual mean of cv_loss per learner
   expect_equal(rl[["Mean"]], manual, tolerance = 1e-12)
 })
 
+test_that("loss_learners(type='cv') returns data frame with .index and learner columns", {
+  task <- initialize_enfold(x, y) |>
+    add_learners(lrn_mean("Mean"), lrn_glm("GLM", family = gaussian())) |>
+    add_metalearners(mtl_selector("Sel")) |>
+    add_cv_folds(inner_cv = 3L, outer_cv = 3L)
+  fitted <- fit(task)
+
+  df <- loss_learners(fitted, loss_fun = loss_gaussian(), type = "cv")
+  expect_true(is.data.frame(df))
+  expect_equal(nrow(df), n)
+  expect_true(".index" %in% names(df))
+  expect_setequal(setdiff(names(df), ".index"), c("Mean", "GLM"))
+  expect_true(all(df$Mean >= 0))
+})
+
+test_that("loss_learners(type='ensemble') works without outer CV", {
+  task <- initialize_enfold(x, y) |>
+    add_learners(lrn_mean("Mean"), lrn_glm("GLM", family = gaussian())) |>
+    add_metalearners(mtl_selector("Sel")) |>
+    add_cv_folds(inner_cv = 3L, outer_cv = NA)
+  fitted <- fit(task)
+
+  df <- loss_learners(fitted, loss_fun = loss_gaussian(), type = "ensemble")
+  expect_true(is.data.frame(df))
+  expect_equal(nrow(df), n)
+  expect_true(".index" %in% names(df))
+})
+
+test_that("colMeans of loss_learners(type='cv') equals risk_learners(type='cv')", {
+  task <- initialize_enfold(x, y) |>
+    add_learners(lrn_mean("Mean"), lrn_glm("GLM", family = gaussian())) |>
+    add_metalearners(mtl_selector("Sel")) |>
+    add_cv_folds(inner_cv = 3L, outer_cv = 3L)
+  fitted <- fit(task)
+
+  df <- loss_learners(fitted, loss_fun = loss_gaussian(), type = "cv")
+  rl <- risk_learners(fitted, loss_fun = loss_gaussian(), type = "cv")
+  lrn_cols <- setdiff(names(df), ".index")
+  means <- colMeans(df[, lrn_cols, drop = FALSE])
+  expect_equal(means, rl[lrn_cols], tolerance = 1e-12)
+})
+
 
 ## ============================================================================
 ## 8.  print methods smoke tests
@@ -449,4 +527,113 @@ test_that("print.enfold_fold does not error", {
 test_that("print.enfold_cv does not error", {
   cv <- create_cv_folds(n = 80L, inner_cv = 3L, outer_cv = 2L)
   expect_no_error(print(cv))
+})
+
+
+## ============================================================================
+## 9.  make_cv_function
+## ============================================================================
+
+test_that("make_cv_function returns enfold_cv_fun with correct slots", {
+  fn <- function(n, V) origami::make_folds(n = n, V = V)
+  cf <- make_cv_function(fn, V = 5L)
+  expect_s3_class(cf, "enfold_cv_fun")
+  expect_equal(cf$args$V, 5L)
+  expect_length(cf$subset_args, 0L)
+})
+
+test_that("make_cv_function records .subset names", {
+  fn <- function(n, V, strata_ids) origami::make_folds(n = n, V = V)
+  cf <- make_cv_function(fn, V = 3L, strata_ids = integer(10), .subset = "strata_ids")
+  expect_equal(cf$subset_args, "strata_ids")
+})
+
+test_that("make_cv_function errors on non-function fn", {
+  expect_error(make_cv_function("not_a_function", V = 3L), "`fn` must be a function")
+})
+
+test_that("make_cv_function errors when n is pre-filled", {
+  fn <- function(n, V) origami::make_folds(n = n, V = V)
+  expect_error(make_cv_function(fn, n = 80L, V = 3L), "`n` must not be pre-filled")
+})
+
+test_that("make_cv_function errors when required formals are missing", {
+  fn <- function(n, V, strata_ids) origami::make_folds(n = n, V = V)
+  expect_error(
+    make_cv_function(fn, V = 3L),   # strata_ids required but absent
+    "required argument"
+  )
+})
+
+test_that("make_cv_function errors when .subset names are absent from ...", {
+  fn <- function(n, V) origami::make_folds(n = n, V = V)
+  expect_error(
+    make_cv_function(fn, V = 3L, .subset = "strata_ids"),
+    "not found in"
+  )
+})
+
+test_that("make_cv_function allows different V for inner and outer folds", {
+  fn <- function(n, V) origami::make_folds(n = n, V = V)
+  cv <- create_cv_folds(
+    n = n,
+    inner_cv = make_cv_function(fn, V = 4L),
+    outer_cv  = make_cv_function(fn, V = 2L)
+  )
+  expect_s3_class(cv, "enfold_cv")
+  expect_length(cv$performance_sets, 2L)
+  expect_length(cv$build_sets[[1L]], 4L)
+})
+
+test_that("make_cv_function subsets indexed args for inner folds", {
+  strata <- rep(1:2, length.out = n)
+  # Custom fold function that errors if strata_ids length != n, so the test
+  # fails loudly if .subset does not correctly trim the vector to n_tr.
+  strat_fun <- function(n, V, strata_ids) {
+    if (length(strata_ids) != n) stop(sprintf(
+      "strata_ids length (%d) != n (%d)", length(strata_ids), n
+    ))
+    origami::make_folds(n = n, V = V)
+  }
+  cv <- create_cv_folds(
+    n = n,
+    inner_cv = make_cv_function(strat_fun, V = 3L, strata_ids = strata,
+                                .subset = "strata_ids"),
+    outer_cv  = make_cv_function(strat_fun, V = 2L, strata_ids = strata,
+                                 .subset = "strata_ids")
+  )
+  expect_s3_class(cv, "enfold_cv")
+  expect_length(cv$performance_sets, 2L)
+  expect_length(cv$build_sets[[1L]], 3L)
+  outer_tr <- training_set(cv$performance_sets[[1L]])
+  inner_all <- unlist(lapply(cv$build_sets[[1L]], function(f) {
+    c(training_set(f), validation_set(f))
+  }))
+  expect_true(all(inner_all %in% outer_tr))
+})
+
+test_that("without .subset, indexed arg is not subsetted for inner folds", {
+  # Verify that omitting .subset causes the full-length arg to reach the inner
+  # fold function unchanged (demonstrating what .subset fixes).
+  env <- new.env(parent = emptyenv())
+  env$received_len <- NA_integer_
+
+  recorder <- function(n, V, strata_ids) {
+    assign("received_len", length(strata_ids), envir = env)
+    origami::make_folds(n = n, V = V)  # ignore strata_ids so no error
+  }
+
+  create_cv_folds(
+    n = n,
+    inner_cv = make_cv_function(recorder, V = 3L, strata_ids = rep(1:2, length.out = n)),
+    outer_cv  = 2L
+  )
+  # strata_ids was NOT subsetted — full n passed through
+  expect_equal(env$received_len, n)
+})
+
+test_that("print.enfold_cv_fun does not error", {
+  fn <- function(n, V, strata_ids) origami::make_folds(n = n, V = V)
+  cf <- make_cv_function(fn, V = 3L, strata_ids = integer(10), .subset = "strata_ids")
+  expect_no_error(print(cf))
 })

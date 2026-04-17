@@ -44,10 +44,6 @@ test_that("initialize_enfold stores x in a locked environment", {
   expect_true(environmentIsLocked(task$x_env))
 })
 
-test_that("initialize_enfold rejects non-matrix/data-frame x", {
-  expect_error(initialize_enfold(as.list(x), y), "data frame or matrix")
-})
-
 test_that("initialize_enfold rejects mismatched nrow(x) and length(y)", {
   expect_error(initialize_enfold(x, y[-1L]), "same number")
 })

@@ -1,0 +1,6 @@
+- Pipelines in enfold
+- Grids in enfold
+- Big data in enfold
+- How to: custom learner
+- How to: custom grids
+- Details on the package's architecture

@@ -2,5 +2,6 @@
 ^\.Rproj\.user$
 ^LICENSE\.md$
 ^dev$
-^\.claude$
 ^\.vscode$
+^cran-comments\.md$
+^README\.Rmd$

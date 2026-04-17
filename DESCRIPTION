@@ -1,6 +1,6 @@
 Package: enfold
 Title: Model Ensembling With Nested Cross-Validation
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: 
     person("Malik", "Cakir", , "enes.cakir@med.uni-goettingen.de", role = c("aut", "cre"))
 Description: A model ensembling toolbox that makes nested cross-validation
@@ -21,18 +21,22 @@ Imports:
     splines,
     stats,
     utils
-Suggests: 
+Suggests:
+    arrow,
+    bigstatsr,
     earth,
     hal9001,
     future,
     glmnet,
     mboost,
     mgcv,
+    quarto,
     ranger,
     rBayesianOptimization,
     RSpectra,
     testthat,
     xgboost
+VignetteBuilder: quarto
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.2

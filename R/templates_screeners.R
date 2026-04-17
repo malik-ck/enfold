@@ -154,7 +154,8 @@ scr_lasso <- function(name, alpha = 1, lambda = NULL, n_vars = NULL) {
         fit_obj <- glmnet::glmnet(x_sc, y, alpha = alpha)
         n_nonzero <- colSums(fit_obj$beta != 0)
         idx <- which.min(abs(n_nonzero - n_vars))
-        coef_vec <- drop(as.matrix(fit_obj$beta[, idx, drop = FALSE]))
+        coef_mat <- as.matrix(fit_obj$beta[, idx, drop = FALSE])
+        coef_vec <- coef_mat[, 1L, drop = TRUE]
       }
       selected <- which(coef_vec != 0)
       if (length(selected) == 0L) {

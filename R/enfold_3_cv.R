@@ -1,6 +1,6 @@
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # CV fold adder to tasks
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 
 #' Add cross-validation folds to an \code{enfold_task}
 #'
@@ -76,6 +76,85 @@ add_cv_folds.enfold_task <- function(
 }
 
 
+#' Bundle a fold function with pre-bound arguments
+#'
+#' Creates an \code{enfold_cv_fun} object that pairs a fold-creation function
+#' with its named arguments, optionally marking some of those arguments as
+#' observation-indexed so they are automatically subsetted to the active
+#' training indices when used for inner folds in nested CV.
+#'
+#' @param fn A function with at least an \code{n} argument.
+#' @param ... Named arguments forwarded to \code{fn} at call time.
+#' @param .subset Character vector of argument names from \code{...} that
+#'   have length \code{n} (e.g. \code{strata}, \code{cluster}) and should be
+#'   subsetted to the active training indices before \code{fn} is called. For
+#'   outer folds the full index sequence is used, so no information is lost.
+#' @return An \code{enfold_cv_fun} object.
+#' @seealso \code{\link{create_cv_folds}}, \code{\link{add_cv_folds}}
+#' @examples
+#' strata <- rep(1:2, length.out = 100)
+#' 
+#' # Use make_folds() from the origami package here
+#' cv <- create_cv_folds(
+#'   n = 100,
+#'   inner_cv = make_cv_function(origami::make_folds, V = 5L, strata_ids = strata,
+#'                               .subset = "strata_ids"),
+#'   outer_cv = make_cv_function(origami::make_folds, V = 3L, strata_ids = strata,
+#'                               .subset = "strata_ids")
+#' )
+#' @export
+make_cv_function <- function(fn, ..., .subset = character(0)) {
+  if (!is.function(fn)) {
+    stop("`fn` must be a function.", call. = FALSE)
+  }
+  args <- list(...)
+
+  if ("n" %in% names(args)) {
+    stop(
+      "`n` must not be pre-filled in `make_cv_function()` -- it is supplied by enfold at call time.",
+      call. = FALSE
+    )
+  }
+
+  fmls <- formals(fn)
+  required <- names(Filter(function(v) identical(v, quote(expr = )), fmls))
+  required <- setdiff(required, c("n", "..."))
+  missing_req <- setdiff(required, names(args))
+  if (length(missing_req) > 0L) {
+    stop(sprintf(
+      "`fn` has required argument(s) not provided in `...`: %s",
+      paste(missing_req, collapse = ", ")
+    ), call. = FALSE)
+  }
+
+  .subset <- as.character(.subset)
+  if (length(.subset) > 0L) {
+    bad <- setdiff(.subset, names(args))
+    if (length(bad) > 0L) {
+      stop(sprintf(
+        "`.subset` name(s) not found in `...`: %s",
+        paste(bad, collapse = ", ")
+      ), call. = FALSE)
+    }
+  }
+  structure(
+    list(fn = fn, args = args, subset_args = .subset),
+    class = "enfold_cv_fun"
+  )
+}
+
+#' @export
+print.enfold_cv_fun <- function(x, ...) {
+  cat(sprintf(
+    "enfold_cv_fun | %d bound arg(s)%s\n",
+    length(x$args),
+    if (length(x$subset_args) > 0L)
+      sprintf(" | indexed: %s", paste(x$subset_args, collapse = ", "))
+    else ""
+  ))
+  invisible(x)
+}
+
 make_vfold_fun <- function(v) {
   force(v)
   function(n, ...) {
@@ -83,9 +162,9 @@ make_vfold_fun <- function(v) {
   }
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# enfold_fold — single fold
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# enfold_fold -- single fold
+# ==============================================================================
 
 # new_fold: internal constructor for a single cross-validation fold.
 # Use create_cv_folds() or add_cv_folds() to create folds in normal usage.
@@ -129,7 +208,7 @@ new_fold <- function(
   )
 }
 
-# ── Accessors ──────────────────────────────────────────────────────────────
+# -- Accessors --------------------------------------------------------------
 
 #' Extract training or validation indices from a fold
 #'
@@ -178,7 +257,7 @@ validation_set.enfold_fold <- function(fold, ...) {
   idx
 }
 
-# ── exclude() generic ──────────────────────────────────────────────────────
+# -- exclude() generic ------------------------------------------------------
 
 #' Exclude indices from a fold or fold list
 #'
@@ -211,7 +290,7 @@ exclude.enfold_fold <- function(x, indices, ...) {
   x
 }
 
-# ── print ──────────────────────────────────────────────────────────────────
+# -- print ------------------------------------------------------------------
 
 #' @export
 print.enfold_fold <- function(x, ...) {
@@ -232,9 +311,9 @@ print.enfold_fold <- function(x, ...) {
 }
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# enfold_fold_list — ordered collection of folds
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# enfold_fold_list -- ordered collection of folds
+# ==============================================================================
 
 # new_fold_list: internal constructor wrapping a list of enfold_fold objects.
 # Used by create_cv_folds() and internally by build_ensembles().
@@ -270,9 +349,9 @@ print.enfold_fold_list <- function(x, ...) {
   invisible(x)
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# enfold_cv — full nested CV structure
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# enfold_cv -- full nested CV structure
+# ==============================================================================
 
 # new_cv: internal constructor for an enfold_cv object.
 # Use create_cv_folds() or add_cv_folds() to create CV structures in normal usage.
@@ -337,9 +416,9 @@ print.enfold_cv <- function(x, ...) {
 }
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# create_cv_folds — internal constructor
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
+# create_cv_folds -- internal constructor
+# ==============================================================================
 
 #' Create cross-validation folds
 #'
@@ -374,8 +453,11 @@ print.enfold_cv <- function(x, ...) {
 #' cv3
 #' @export
 create_cv_folds <- function(n, inner_cv = NA, outer_cv = NA, ...) {
-  # ── Resolve cv_instructions to inner_cv / outer_cv ────────────────────────
+  # -- Resolve cv_instructions to inner_cv / outer_cv ------------------------
   resolve_one <- function(x, arg_name) {
+    if (inherits(x, "enfold_cv_fun")) {
+      return(x)
+    }
     if (is.function(x)) {
       return(x)
     }
@@ -403,12 +485,23 @@ create_cv_folds <- function(n, inner_cv = NA, outer_cv = NA, ...) {
 
   dots <- list(...)
 
-  call_cv_fun <- function(fun, n) {
-    declared <- names(formals(fun))
-    if ("..." %in% declared) {
-      do.call(fun, c(list(n = n), dots))
+  call_cv_fun <- function(fun, n, idx = NULL) {
+    if (inherits(fun, "enfold_cv_fun")) {
+      call_args <- fun$args
+      if (!is.null(idx) && length(fun$subset_args) > 0L) {
+        for (nm in fun$subset_args) {
+          a <- call_args[[nm]]
+          call_args[[nm]] <- if (!is.null(dim(a))) a[idx, , drop = FALSE] else a[idx]
+        }
+      }
+      do.call(fun$fn, c(list(n = n), call_args))
     } else {
-      do.call(fun, c(list(n = n), dots[intersect(names(dots), declared)]))
+      declared <- names(formals(fun))
+      if ("..." %in% declared) {
+        do.call(fun, c(list(n = n), dots))
+      } else {
+        do.call(fun, c(list(n = n), dots[intersect(names(dots), declared)]))
+      }
     }
   }
 
@@ -424,8 +517,8 @@ create_cv_folds <- function(n, inner_cv = NA, outer_cv = NA, ...) {
 
   outer_raw <- if (is.null(outer_cv)) {
     list(list(training_set = seq_len(n), validation_set = seq_len(n)))
-  } else if (is.function(outer_cv)) {
-    call_cv_fun(outer_cv, n)
+  } else if (is.function(outer_cv) || inherits(outer_cv, "enfold_cv_fun")) {
+    call_cv_fun(outer_cv, n, idx = seq_len(n))
   } else {
     outer_cv
   }
@@ -436,8 +529,8 @@ create_cv_folds <- function(n, inner_cv = NA, outer_cv = NA, ...) {
     lapply(outer_fold_list, function(outer_fold) {
       tr <- training_set(outer_fold)
       n_tr <- length(tr)
-      raw <- if (is.function(inner_cv)) {
-        call_cv_fun(inner_cv, n_tr)
+      raw <- if (is.function(inner_cv) || inherits(inner_cv, "enfold_cv_fun")) {
+        call_cv_fun(inner_cv, n_tr, idx = tr)
       } else {
         inner_cv
       }
@@ -459,6 +552,6 @@ create_cv_folds <- function(n, inner_cv = NA, outer_cv = NA, ...) {
   )
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================
 # A few templates for CV fold creation
-# ══════════════════════════════════════════════════════════════════════════════
+# ==============================================================================

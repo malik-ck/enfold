@@ -1,11 +1,11 @@
 ---
 title: "Getting started with enfold"
 vignette: >
-%\VignetteIndexEntry{Getting started with enfold}
+  %\VignetteIndexEntry{Getting started with enfold}
   %\VignetteEncoding{UTF-8}
   %\VignetteEngine{quarto::html}
-  format:
-  html:
+format:
+ html: 
     toc: true
     toc-depth: 3
 knitr:
@@ -67,7 +67,7 @@ to monitor glycemic control in people already diagnosed.
 ```{r data}
 data("enfold_demo", package = "enfold")
 
-x <- enfold_demo[, setdiff(names(Boston), "hba1c")]
+x <- enfold_demo[, setdiff(names(enfold_demo), "hba1c")]
 y <- enfold_demo$hba1c
 
 cat("Rows:", nrow(x), "| Predictors:", ncol(x), "\n")
@@ -168,30 +168,27 @@ to a task without and with piping; the latter is the expected and
 recommended workflow in `enfold`.
 
 ```{r pipes}
-
 # Without piping
 add_learners_no_pipe <- add_learners(
   task,
-  lrn_mean("mean"),
-  lrn_glm("glm", family = gaussian())
+  lrn_mean("Mean"),
+  lrn_glm("GLM", family = gaussian())
 )
 
 # With piping
 add_learners_with_pipe <- task |>
   add_learners(
-    lrn_mean("mean"),
-    lrn_glm("glm", family = gaussian())
+    lrn_mean("Mean"),
+    lrn_glm("GLM", family = gaussian())
   )
 
 #...or to do it all in one shot without having an initialization object sitting around idly:
 initialize_and_add_learners <- initialize_enfold(x, y) |>
   add_learners(
-    lrn_mean("mean"),
-    lrn_glm("glm", family = gaussian())
+    lrn_mean("Mean"),
+    lrn_glm("GLM", family = gaussian())
   )
-
 ```
-
 :::
 
 You can use a host of other learner templates if you prefer. Available built-in 
@@ -207,8 +204,8 @@ input and learn a combination rule. They are added with
 ```{r metalearners}
 task <- task |>
   add_metalearners(
-    mtl_selector("selector"), # Picks the single best base learner
-    mtl_superlearner("superlearner") # Learns an optimal convex combination
+    mtl_selector("Selector"), # Picks the single best base learner
+    mtl_superlearner("Superlearner") # Learns an optimal convex combination
   )
 ```
 
@@ -268,47 +265,6 @@ predictions on the outer validation set
 
 This is repeated for each outer fold, such that each metalearner has fully
 cross-validated predictions that can be used as-is or to compare metalearner performance.
-:::
-
-If we want access to cross-validated predictions of model ensembles, we need to
-pass a non-`NA` value to both `inner_cv` and `outer_cv`. If we just want to train
-one ensemble and do not care about an honest performance evaluation, we set `outer_cv`
-to `NA`. If we do not want to build ensembles and just want cross-validated
-predictions for our learners, we set `inner_cv` to `NA`.
-
-::: {.callout-tip collapse="true" title="Advanced note: passing functions for complex CV schemes"}
-Passing integers into `inner_cv` and `outer_cv` is fully sufficient if we only
-need simple V-fold validation. Unfortunately, we sometimes need more. For
-example, if we have clustered data, we need to use clustered cross-validation:
-all observations within a cluster should end up in the same fold.
-
-In such cases, we can instead pass a function to `inner_cv` and `outer_cv`.
-This function should have an argument `n`, but can have other arguments as well.
-If there are other arguments, we simply pass them as an additional argument to `add_cv_folds`: it has dots, so we simply write them next to `inner_cv` and 
-`outer_cv`. The code block below shows how we could do cross-validation,
-stratified by the variable `coronary_heart_disease`. We remove it as a predictor
-and instead pass it as part of our cross-validation instruction:
-
-```{r folds}
-# Get CHD as separate variable
-chd <- enfold_demo$coronary_heart_disease
-
-# Remove it from our predictors
-x_no_chd <- x[,-which(colnames(enfold_demo) == "coronary_heart_disease")]
-
-# Create a new task for illustration that stratifies cross-validation
-task_with_stratified_folds <- initialize_enfold(x_no_chd, y) |>
-  add_cv_folds(
-    inner_cv = origami::make_folds(V = 5), # Pass number of folds here already
-    outer_cv = origami::make_folds(V = 8), # Can pass more folds here if desired
-    fold_fun = folds_vfold, # Required argument telling make_folds to do V-fold CV
-    strata_ids = chd # Optional argument telling make_folds what to stratify by
-  )
-```
-
-The contract is that (HOW DOES THE OUTPUT OF CUSTOM FUNCTIONS NEED TO LOOK LIKE?).
-The `enfold` package internally uses `origami` for fold creation, so a safe option
-is using one of the many approaches implemented in `origami`, if possible.
 
 :::
 
@@ -331,23 +287,83 @@ task_separate_cv <- initialize_enfold(x, y) |>
   add_cv_folds(cv = separate_cv)
 ```
 
+If we want access to cross-validated predictions of model ensembles, we need to
+pass a non-`NA` value to both `inner_cv` and `outer_cv`. If we just want to train
+one ensemble and do not care about an honest performance evaluation, we set `outer_cv`
+to `NA`. If we do not want to build ensembles and just want cross-validated
+predictions for our learners, we set `inner_cv` to `NA`.
+
+::: {.callout-tip collapse="true" title="Advanced note: passing functions for complex CV schemes"}
+Passing integers into `inner_cv` and `outer_cv` is fully sufficient if we only
+need simple V-fold validation. Unfortunately, we sometimes need more. For
+example, if we have clustered data, we need to use clustered cross-validation:
+all observations within a cluster should end up in the same fold.
+
+In such cases, we can instead pass a function to `inner_cv` and `outer_cv`,
+which we create via `make_cv_function`. This allows us to use any cross-validation
+scheme implemented by us or others. Using functions from the `origami` package is
+recommended, because it creates fold objects in the right format: a named list with
+two entries, one named `training_set` and one named `validation_set`, 
+each containing a vector of indices for the training and validation observations in each fold.
+
+We call `make_cv_function` as follows. The first argument we pass is the cross-validation
+function we want to use. Then, we simply pass all other arguments required by the function,
+which will often at least be the number of folds `V`. Lastly, if we have any arguments that
+are vectors of length `n`, we say which they are by passing their names to the `.subset` argument. 
+It is required that the cross-validation function we use has an argument `n`,
+and that we don't pass it ourselves.
+
+The code block below shows how we could do cross-validation,
+stratified by the variable `coronary_heart_disease`. We remove it as a predictor
+and instead pass it as part of our cross-validation instruction:
+
+```{r complex folds}
+# Get CHD as separate variable
+chd <- enfold_demo$coronary_heart_disease
+
+# Remove it from our predictors
+x_no_chd <- x[, -which(colnames(enfold_demo) == "coronary_heart_disease")]
+
+# Create a new task for illustration that stratifies cross-validation
+task_with_stratified_folds <- initialize_enfold(x_no_chd, y) |>
+  add_cv_folds(
+    inner_cv = make_cv_function(
+      origami::make_folds,
+      V = 5L,
+      strata_ids = chd,
+      .subset = "strata_ids"
+    ),
+    outer_cv = make_cv_function(
+      origami::make_folds,
+      V = 5L,
+      strata_ids = chd,
+      .subset = "strata_ids"
+    )
+  )
+```
+
+:::
+
 ## Step 5 — Fit
 
-`fit()` trains all learners and metalearners according to the fold
-structure.
+That's all we need to specify the task! We can now call `fit()`, which fits
+our learners and metaleearners according to the specifications we have given.
 
 ```{r fit}
 task <- fit(task)
 task
 ```
 
-For parallel execution across outer folds, set a `future` plan *before*
-calling `fit()`:
+`enfold` can also fit in parallel across outer folds via the packages `future`
+and `future.apply`. To do this, we use `future::plan()` to create a parallelization
+plan ourselves, and then call `fit()`. The code below uses a multisession plan
+with four workers. To see how many workers you could use, check `future::availableCores()`,
+but be mindful of your computer's resources and the size of your data.
 
 ```{r parallel, eval = FALSE}
 future::plan(future::multisession, workers = 4L)
 task <- fit(task)
-future::plan(future::sequential)   # reset afterwards
+future::plan(future::sequential) # reset afterwards
 ```
 
 ## Step 6 — Evaluate
@@ -382,11 +398,11 @@ fold_risk(task, loss_fun = loss_gaussian())
 
 ### Observation-level loss
 
-`cv_loss()` returns a data frame with one loss value per observation,
+`loss()` returns a data frame with one loss value per observation,
 enabling loss distribution plots and outlier inspection.
 
 ```{r cv-loss}
-obs_loss <- cv_loss(task, loss_fun = loss_gaussian())
+obs_loss <- loss(task, loss_fun = loss_gaussian(), type = "cv")
 head(obs_loss)
 ```
 
@@ -408,8 +424,12 @@ you must specify which outer-fold ensemble to use via
 `ensemble_fold_id`.
 
 ```{r predict-new, eval = FALSE}
-new_preds <- predict(task, newdata = x[1:10, ],
-                     type = "ensemble", ensemble_fold_id = 1L)
+new_preds <- predict(
+  task,
+  newdata = x[1:10, ],
+  type = "ensemble",
+  ensemble_fold_id = 1L
+)
 ```
 
 ## Advanced functionality
@@ -431,16 +451,16 @@ path per combination.
 ```{r pipelines, eval = FALSE}
 # A screener upstream, then two competing learners downstream
 pipe <- make_pipeline(
-  scr_correlation("screener", cutoff = 0.1),
+  scr_svd("Screener", n_components = 4),
   list(
-    lrn_glm("glm",  family = gaussian()),
-    lrn_mean("mean")
+    lrn_glm("GLM", family = gaussian()),
+    lrn_mean("Mean")
   )
 )
 
 task_pipe <- initialize_enfold(x, y) |>
   add_learners(pipe) |>
-  add_metalearners(mtl_selector("selector")) |>
+  add_metalearners(mtl_selector("Selector")) |>
   add_cv_folds(inner_cv = 5L, outer_cv = 5L) |>
   fit()
 ```
@@ -455,18 +475,7 @@ each path as an independent learner.
 combinations. It requires `inner_cv` to be non-`NULL`.
 
 ```{r grids, eval = FALSE}
-grid <- make_grid(
-  name_prefix      = "glmnet",
-  lrn_glmnet,
-  alpha            = c(0, 0.5, 1),
-  lambda           = c(0.01, 0.1, 1)
-)
-
-task_grid <- initialize_enfold(x, y) |>
-  add_learners(grid) |>
-  add_metalearners(mtl_superlearner("sl")) |>
-  add_cv_folds(inner_cv = 5L, outer_cv = 5L) |>
-  fit()
+# Fill in still
 ```
 
 Each hyperparameter combination is treated as a separate learner and

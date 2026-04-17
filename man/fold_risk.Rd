@@ -46,5 +46,5 @@ fr <- fold_risk(task, loss_fun = loss_gaussian())
 }
 }
 \seealso{
-\code{\link{risk.enfold_task_fitted}}, \code{\link{cv_loss}}
+\code{\link{risk.enfold_task_fitted}}, \code{\link{loss.enfold_task_fitted}},
 }

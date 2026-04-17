@@ -11,7 +11,7 @@ grd_bayes(
   directory = NULL,
   n_init = 5L,
   n_iter = 10L,
-  score_fn,
+  score,
   seed = NULL
 )
 }
@@ -33,13 +33,10 @@ Bayesian updating begins. Default \code{5L}.}
 \item{n_iter}{Integer. Number of Bayesian optimisation iterations after
 the random phase. Default \code{10L}.}
 
-\item{score_fn}{A \code{function(result, y) -> numeric(1)} that extracts a
-scalar score (higher is better) from a candidate result. \code{result}
-carries fields \code{$name} (learner name string), \code{$combo} (named
-list of hyperparameter values), and \code{$contrib} (named list of
-out-of-fold predictions, one entry per terminal output, each with
-\code{attr(., "indices")} carrying the corresponding row indices).
-\code{y} is the full outcome vector or matrix passed to the grid search.}
+\item{score}{An \code{enfold_score} object from \code{\link{make_score}}
+specifying the loss function, an optional metalearner for multi-output
+candidates, and the optimisation direction. Required; no default is
+provided.}
 
 \item{seed}{Integer or \code{NULL}. Passed to \code{set.seed()} before
 the optimisation run.}
@@ -62,17 +59,17 @@ objects via \code{\link{make_range}}.
 params <- specify_hyperparameters(lambda = make_range(1e-4, 10))
 grid   <- grd_bayes(
   "en", lrn_glmnet("en", gaussian()), params,
-  n_init   = 3L,
-  n_iter   = 7L,
-  score_fn = function(result, y) {
-    p   <- result$contrib[[1L]]
-    idx <- attr(p, "indices")
-    -mean((p - y[idx])^2)
-  }
+  score = make_score(loss_gaussian())
+)
+
+# Multi-output pipeline: supply a metalearner
+grid <- grd_bayes(
+  "pipe", my_pipeline, params,
+  score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 )
 }
 }
 \seealso{
-\code{\link{make_grid_factory}}, \code{\link{grd_random}},
-\code{\link{grd_early_stop}}
+\code{\link{make_grid_factory}}, \code{\link{make_score}},
+\code{\link{grd_random}}, \code{\link{grd_early_stop}}
 }
