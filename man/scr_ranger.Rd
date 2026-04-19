@@ -4,7 +4,7 @@
 \alias{scr_ranger}
 \title{Random forest variable screener}
 \usage{
-scr_ranger(name, n_vars, importance = "impurity")
+scr_ranger(name, n_vars, importance = "impurity", parameters = NULL)
 }
 \arguments{
 \item{name}{Character scalar. Name of the screener.}
@@ -15,6 +15,11 @@ scr_ranger(name, n_vars, importance = "impurity")
 \code{"impurity"} (default, Gini/variance impurity) or
 \code{"permutation"} (out-of-bag permutation importance, slower but more
 reliable for correlated predictors).}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns a

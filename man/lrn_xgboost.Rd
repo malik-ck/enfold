@@ -16,7 +16,8 @@ lrn_xgboost(
   verbose = 0L,
   lambda = 2,
   alpha = 0,
-  min_child_weight = 5
+  min_child_weight = 5,
+  parameters = NULL
 )
 }
 \arguments{
@@ -48,6 +49,11 @@ n_snapshots == 1 is treated the same as no snapshotting.}
 \item{alpha}{Numeric. L1 regularisation weight on leaf weights. Default \code{0}.}
 
 \item{min_child_weight}{Numeric. Minimum sum of instance weight in a leaf.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_list} whose \code{predict()} method returns a named

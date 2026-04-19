@@ -4,7 +4,7 @@
 \alias{bex_interactions}
 \title{Interaction basis expander}
 \usage{
-bex_interactions(name, depth = 2L)
+bex_interactions(name, depth = 2L, parameters = NULL)
 }
 \arguments{
 \item{name}{Character scalar. Name of the expander.}
@@ -13,6 +13,11 @@ bex_interactions(name, depth = 2L)
 (default) adds all pairwise products; \code{3} additionally adds all
 triple products, and so on.  For most SuperLearner use cases \code{2}
 is plenty.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns a

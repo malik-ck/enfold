@@ -4,28 +4,35 @@
 \alias{make_range}
 \title{Create a continuous hyperparameter range}
 \usage{
-make_range(min, max)
+make_range(min, max, sample_space = sample_uniform())
 }
 \arguments{
 \item{min}{Numeric scalar. Lower bound (inclusive).}
 
 \item{max}{Numeric scalar. Upper bound (inclusive). Must be strictly greater
 than \code{min}.}
+
+\item{sample_space}{A zero-argument factory that returns a sampling function
+with a single argument \code{n}. Use \code{\link{sample_uniform}} (default)
+for uniform sampling or \code{\link{sample_log_uniform}} for log-scale
+sampling.}
 }
 \value{
 An object of class \code{enfold_range}.
 }
 \description{
 Defines a closed interval \eqn{[\text{min}, \text{max}]} from which
-\code{\link{draw}} and search engines sample uniformly (or log-uniformly if
-\code{\link{log_transform}} is applied).
+\code{\link{draw}} and search engines sample. Pass
+\code{sample_space = \link{sample_log_uniform}()} for log-scale sampling.
 }
 \examples{
 make_range(0.001, 10)
+make_range(1e-4, 1, sample_space = sample_log_uniform())
 
 # Use inside specify_hyperparameters
 specify_hyperparameters(lambda = make_range(1e-4, 1))
 }
 \seealso{
-\code{\link{specify_hyperparameters}}, \code{\link{log_transform}}
+\code{\link{specify_hyperparameters}}, \code{\link{sample_uniform}},
+\code{\link{sample_log_uniform}}
 }

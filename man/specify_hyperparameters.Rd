@@ -9,9 +9,14 @@ specify_hyperparameters(...)
 \arguments{
 \item{...}{Named hyperparameter specifications. Accepted types:
 \itemize{
-\item Numeric or character vectors — discrete candidates.
+\item An \code{enfold_discrete} object from \code{\link{make_discrete}} —
+discrete candidates, sampled at run time.
 \item An \code{enfold_range} object from \code{\link{make_range}} —
-continuous uniform range, sampled at run time.
+continuous range, sampled at run time. Pass
+\code{sample_space = sample_log_uniform()} to \code{make_range} for
+log-scale sampling.
+\item An \code{enfold_mixture} object from \code{\link{mixture}} —
+mixture of discrete and/or continuous distributions.
 }}
 }
 \value{
@@ -20,28 +25,23 @@ An object of class \code{enfold_hyperparameters}.
 \description{
 Creates an \code{enfold_hyperparameters} object that describes the search
 space for grid constructors such as \code{\link{grd_random}}. Each named
-argument defines one hyperparameter as either a discrete vector of candidate
-values or a continuous range created by \code{\link{make_range}}.
+argument defines one hyperparameter and must be either a
+\code{\link{make_discrete}} or a \code{\link{make_range}} object.
 }
 \details{
 Pipe the result through \code{\link{forbid}} to exclude invalid parameter
-combinations, and through \code{\link{log_transform}} to sample a
-continuous parameter on the log scale.
+combinations. To sample on the log scale, pass
+\code{sample_space = sample_log_uniform()} to \code{\link{make_range}}.
 }
 \examples{
-# Discrete grid
 specify_hyperparameters(
-  alpha  = c(0, 0.5, 1),
-  lambda = c(0.01, 0.1, 1)
-)
-
-# Mixed: discrete + continuous range
-specify_hyperparameters(
-  alpha  = c(0, 0.5, 1),
+  alpha  = make_discrete(0, 0.5, 1),
   lambda = make_range(1e-4, 10)
 )
 }
 \seealso{
-\code{\link{make_range}}, \code{\link{forbid}},
-\code{\link{log_transform}}, \code{\link{draw}}, \code{\link{grd_random}}
+\code{\link{make_discrete}}, \code{\link{make_range}},
+\code{\link{mixture}}, \code{\link{sample_uniform}},
+\code{\link{sample_log_uniform}}, \code{\link{forbid}},
+\code{\link{draw}}, \code{\link{grd_random}}
 }

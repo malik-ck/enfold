@@ -4,7 +4,15 @@
 \alias{lrn_glmnet}
 \title{Elastic net / LASSO regularization path learner}
 \usage{
-lrn_glmnet(name, family, offset = NULL, frm = NULL, alpha = 1, nlambda = 20)
+lrn_glmnet(
+  name,
+  family,
+  offset = NULL,
+  frm = NULL,
+  alpha = 1,
+  lambda,
+  parameters = NULL
+)
 }
 \arguments{
 \item{name}{Character. Name for this learner instance.}
@@ -20,8 +28,15 @@ custom basis expansion.}
 \item{alpha}{Numeric in \eqn{[0, 1]}. Elastic net mixing parameter.
 \code{1} (default) = LASSO, \code{0} = ridge.}
 
-\item{nlambda}{Integer. Number of \eqn{\lambda} values in the path.
-Default \code{20}.}
+\item{lambda}{Numeric vector of \eqn{\lambda} values for the regularization
+path, or an \code{enfold_lambda_request} produced by
+\code{\link{make_lambda_sequence}}. Using \code{make_lambda_sequence}
+ensures the same lambda grid is used across all cross-validation folds.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_list} learner (a subclass of
@@ -38,12 +53,15 @@ metalearner. Predictors are internally centered and scaled. Requires the
 }
 \examples{
 \dontrun{
-lrn <- lrn_glmnet("en", family = gaussian(), alpha = 0.5)
-fitted <- fit(lrn, x = as.matrix(mtcars[, -1]), y = mtcars$mpg)
-preds <- predict(fitted, newdata = as.matrix(mtcars[, -1]))
-length(preds)  # nlambda entries
+x <- as.matrix(mtcars[, -1]); y <- mtcars$mpg
+lrn <- lrn_glmnet("en", family = gaussian(), alpha = 0.5,
+  lambda = make_lambda_sequence(x, y, nlambda = 50L))
+fitted <- fit(lrn, x = x, y = y)
+preds <- predict(fitted, newdata = x)
+length(preds)  # 50 entries, one per lambda
 }
 }
 \seealso{
-\code{\link{lrn_bigGlm}}, \code{\link{lrn_hal}}
+\code{\link{lrn_bigGlm}}, \code{\link{lrn_hal}},
+\code{\link{make_lambda_sequence}}
 }

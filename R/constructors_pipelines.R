@@ -128,17 +128,31 @@ make_pipeline <- function(...) {
     )
   }
 
-  if (!inherits(raw[[1L]], "enfold_learner")) {
+  if (is.list(raw[[1L]]) && !inherits(raw[[1L]], c("enfold_learner", "enfold_grid"))) {
     stop(
-      "The first argument to `make_pipeline` must be a single `enfold_learner`."
+      "The first argument to `make_pipeline` must be a single node, not a list of nodes.",
+      call. = FALSE
     )
   }
 
-  # Resolve each argument into a flat list of nodes (enfold_learner or enfold_passthrough)
+  # Resolve each argument into a flat list of nodes (enfold_learner, enfold_grid, or enfold_passthrough)
   stages <- lapply(seq_along(raw), function(i) {
     x <- raw[[i]]
 
     if (inherits(x, "enfold_learner")) {
+      list(x)
+    } else if (inherits(x, "enfold_grid")) {
+      if (!is.null(x$search_engine)) {
+        stop(
+          sprintf(
+            "Argument %d to `make_pipeline` is an enfold_grid with a search engine. ",
+            i
+          ),
+          "Only bare grids (created via lrn_*(name, parameters = ...)) are allowed in pipelines. ",
+          "Apply grd_*() to the full pipeline instead.",
+          call. = FALSE
+        )
+      }
       list(x)
     } else if (length(x) == 1L && is.na(x)) {
       if (i == 1L) {
@@ -153,11 +167,23 @@ make_pipeline <- function(...) {
             stop("The first argument to `make_pipeline` cannot contain NA.")
           }
           make_passthrough()
+        } else if (inherits(item, "enfold_grid")) {
+          if (!is.null(item$search_engine)) {
+            stop(
+              sprintf(
+                "Argument %d to `make_pipeline`, element %d is an enfold_grid with a search engine. ",
+                i, k
+              ),
+              "Only bare grids (created via lrn_*(name, parameters = ...)) are allowed in pipelines.",
+              call. = FALSE
+            )
+          }
+          item
         } else if (inherits(item, "enfold_learner")) {
           item
         } else {
           stop(sprintf(
-            "Argument %d to `make_pipeline`, element %d: must be an enfold_learner or NA.",
+            "Argument %d to `make_pipeline`, element %d: must be an enfold_learner, enfold_grid, or NA.",
             i,
             k
           ))
@@ -165,7 +191,7 @@ make_pipeline <- function(...) {
       })
     } else {
       stop(sprintf(
-        "Argument %d to `make_pipeline` must be an enfold_learner, NA, or a list of these.",
+        "Argument %d to `make_pipeline` must be an enfold_learner, enfold_grid, NA, or a list of these.",
         i
       ))
     }
@@ -200,7 +226,34 @@ make_pipeline <- function(...) {
 fit.enfold_pipeline <- function(object, x, y, ...) {
   stages <- object$stages
   n_stages <- length(stages)
-  active_names <- active_path_names(object)
+
+  # Expand any bare enfold_grid nodes into their concrete learners.
+  # Multiple bare grids across stages are expanded independently (Cartesian product).
+  has_bare_grid <- any(vapply(stages, function(stage) {
+    any(vapply(stage, function(node) inherits(node, "enfold_grid"), logical(1L)))
+  }, logical(1L)))
+
+  if (has_bare_grid) {
+    stages <- lapply(stages, function(stage) {
+      expanded <- list()
+      for (node in stage) {
+        if (inherits(node, "enfold_grid")) {
+          combo_df <- draw(node$hyperparams, n = NULL)
+          new_nodes <- lapply(seq_len(nrow(combo_df)), function(i) {
+            apply_combo(node, combo_row(combo_df, i))
+          })
+          expanded <- c(expanded, new_nodes)
+        } else {
+          expanded <- c(expanded, list(node))
+        }
+      }
+      expanded
+    })
+    new_paths <- enumerate_paths(stages)
+    active_names <- vapply(new_paths, function(p) path_name(stages, p), character(1L))
+  } else {
+    active_names <- active_path_names(object)
+  }
 
   path_states <- list(list(
     name_parts = character(0L),

@@ -7,29 +7,15 @@
 make_grid_factory(search, ...)
 }
 \arguments{
-\item{search}{A function with arguments
-\code{(hyperparams, name_prefix, learner_object, directory, x, y, folds)}
-that implements the search strategy. \code{hyperparams} is an
-\code{enfold_hyperparameters} object; the remaining arguments give the search
-function direct access to the grid's learner object, pipeline directory,
-the full data, and the cross-validation folds. The body of \code{search}
-may freely reference any configuration parameter declared in \code{...}.
-It must return a list of result objects, each with fields \code{$name}
-(combo name string), \code{$combo} (named list of hyperparameter values),
-and \code{$contrib} (named list of out-of-fold predictions for that
-candidate, one entry per terminal output, each with
-\code{attr(., "indices")} carrying the corresponding row indices).}
+\item{search}{A function with arguments \code{(search_space, learner, x, y, folds)}
+that implements the search strategy. Call \code{apply_combo(learner, combo)} to
+instantiate concrete learners from sampled parameter combinations.}
 
-\item{...}{Configuration parameters. Bare names (e.g. \code{seed})
-become required arguments of the returned constructor; named values
-(e.g. \code{seed = NULL}) become optional arguments with defaults.
-Names \code{name_prefix}, \code{learner_object}, \code{parameters},
-\code{directory}, and \code{search} are reserved and will cause an error.}
+\item{...}{Configuration parameters for the search engine.}
 }
 \value{
-A constructor
-\code{function(name_prefix, learner_object, parameters, ..., directory = NULL)}
-that builds an \code{enfold_grid} with the baked-in search engine.
+A constructor that builds an \code{enfold_grid} with the baked-in
+search engine.
 }
 \description{
 Returns a constructor function for \code{enfold_grid} objects. The
@@ -42,36 +28,24 @@ This is the grid-search analogue of \code{\link{make_learner_factory}}.
 The built-in constructors \code{\link{grd_random}},
 \code{\link{grd_early_stop}}, and \code{\link{grd_bayes}} are produced
 by this factory.
+\subsection{Calling the produced constructor}{
 
-The closure environment of the resulting search engine contains only the
-configuration parameter values and the \code{search} function, nothing
-else.
+The produced constructor accepts two usage forms:
+
+\describe{
+\item{Bare-grid form}{
+\code{grd_*(bare_grid, ...)} where \code{bare_grid} is an
+\code{enfold_grid} without a search engine, created by passing
+\code{parameters =} to a learner constructor. The learner, its
+hyperparameter spec, and the internal \code{directory} are extracted
+from the bare grid automatically.
 }
-\examples{
-# A custom exhaustive search (evaluates every discrete combination).
-# Inside the search function, enfold's internal cross-validation helpers
-# are accessible automatically because the function runs in the package
-# namespace.
-grd_exhaustive <- make_grid_factory(
-  search = function(hyperparams, name_prefix, learner_object, directory, x, y, folds) {
-
-    combo_df <- draw(hyperparams, n = NULL)
-    results  <- list()
-
-    for (i in seq_len(nrow(combo_df))) {
-      combo <- as.list(combo_df[i, , drop = FALSE])
-      nm <- paste0(name_prefix, "/", paste(names(combo), combo, sep = "=", collapse = ","))
-      modified <- change_arguments(learner_object, directory, combo, name = nm)
-      contrib <- tryCatch(cv_fit(modified, folds, x, y), error = function(e) NULL)
-      if (is.null(contrib) || !is.null(attr(contrib, "failed_learner"))) next
-      results <- c(results, list(list(name = nm, combo = combo, contrib = contrib)))
-    }
-    results
-  }
-)
-\dontrun{
-params <- specify_hyperparameters(alpha = c(0, 0.5, 1))
-grid   <- grd_exhaustive("en", lrn_glmnet("en", gaussian()), params)
+\item{Pipeline form}{
+\code{grd_*(pipeline, ...)} where \code{pipeline} is an
+\code{enfold_pipeline} that contains exactly one embedded bare grid node.
+All needed information is harvested automatically.
+}
+}
 }
 }
 \seealso{

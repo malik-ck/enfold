@@ -229,8 +229,11 @@ make_learner_factory <- function(fit, preds, ..., expect_list = FALSE) {
     }
   }
 
+  # Always inject parameters = NULL as the last named arg (before expect_list)
+  constr_args["parameters"] <- list(NULL)
+
   constructor <- function() {}
-  hyperparam_names <- setdiff(names(constr_args), "name")
+  hyperparam_names <- setdiff(names(constr_args), c("name", "parameters"))
   formals(constructor) <- constr_args
 
   body(constructor) <- bquote({
@@ -255,10 +258,25 @@ make_learner_factory <- function(fit, preds, ..., expect_list = FALSE) {
       "enfold_learner"
     }
 
-    structure(
+    learner_obj <- structure(
       list(name = name, fit = wrapped_fit, preds = wrapped_preds),
       class = class_assign
     )
+
+    # If parameters provided, validate names and return a bare enfold_grid
+    if (!is.null(parameters)) {
+      bad_params <- setdiff(names(parameters), .(hyperparam_names))
+      if (length(bad_params) > 0L) {
+        stop(
+          "parameters contains names not recognised by this constructor: ",
+          paste(bad_params, collapse = ", "),
+          call. = FALSE
+        )
+      }
+      return(make_bare_grid(name, learner_obj, parameters))
+    }
+
+    learner_obj
   })
 
   constructor

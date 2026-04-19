@@ -4,27 +4,13 @@
 \alias{grd_random}
 \title{Random hyperparameter search grid constructor}
 \usage{
-grd_random(
-  name_prefix,
-  learner_object,
-  parameters,
-  directory = NULL,
-  n_candidates = NULL,
-  seed = NULL
-)
+grd_random(grid, n_candidates = NULL, seed = NULL)
 }
 \arguments{
-\item{name_prefix}{Character. Prefix for generated learner names
-(e.g. \code{"rf"} yields names like \code{"rf/num.trees=500,mtry=3"}).}
-
-\item{learner_object}{An \code{enfold_learner}, \code{enfold_pipeline}, or
-\code{enfold_list} instance to search over.}
-
-\item{parameters}{An \code{enfold_hyperparameters} object from
-\code{\link{specify_hyperparameters}}.}
-
-\item{directory}{\code{NULL} for a plain learner, or a character vector
-naming the target node inside a pipeline.}
+\item{grid}{A bare \code{enfold_grid} (created via
+\code{lrn_*(name, parameters = ...)}) or an \code{enfold_pipeline}
+containing exactly one embedded bare grid node. Name, learner, and
+hyperparameter specification are derived automatically.}
 
 \item{n_candidates}{Integer or \code{NULL}. Number of random draws.
 When \code{NULL} and all parameters are discrete, all valid
@@ -43,11 +29,13 @@ A \code{\link{make_grid_factory}}-produced constructor that builds an
 }
 \examples{
 \dontrun{
-params <- specify_hyperparameters(
-  num.trees = c(100L, 500L),
-  mtry      = c(2L, 4L)
+grid <- grd_random(
+  lrn_ranger("rf", parameters = specify_hyperparameters(
+    num.trees = make_discrete(100L, 500L),
+    mtry      = make_discrete(2L, 4L)
+  )),
+  n_candidates = 5L, seed = 42L
 )
-grid <- grd_random("rf", lrn_ranger("rf"), params, n_candidates = 5L, seed = 42L)
 
 x <- mtcars[, -1]; y <- mtcars$mpg
 task <- initialize_enfold(x, y) |>

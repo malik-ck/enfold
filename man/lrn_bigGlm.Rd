@@ -4,7 +4,7 @@
 \alias{lrn_bigGlm}
 \title{Big GLM learner (glmnet back-end)}
 \usage{
-lrn_bigGlm(name, family, offset = NULL, frm = NULL)
+lrn_bigGlm(name, family, offset = NULL, frm = NULL, parameters = NULL)
 }
 \arguments{
 \item{name}{Character. Name for this learner instance.}
@@ -16,6 +16,11 @@ as an offset.}
 
 \item{frm}{Formula or \code{NULL}. Passed to \code{model.matrix()} for
 custom basis expansion.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

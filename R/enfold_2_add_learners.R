@@ -141,26 +141,32 @@ check_unique_names <- function(learners, metalearners) {
 
 # Helper: Get learner packages
 get_lrn_packages <- function(learners) {
-  # Small internal helper
-  extract_pkgs <- function(fun_expr) {
-    funs <- get_funs(fun_expr)
-    unique(unlist(lapply(funs, function(fun_name) {
-      loc <- utils::getAnywhere(fun_name)$where
-      if (length(loc) == 0L) {
-        return(NULL)
+  extract_pkgs <- function(expr) {
+    # If a function is passed, grab its body to inspect
+    if (is.function(expr)) {
+      expr <- body(expr)
+    }
+
+    # If the current element is a call (a function execution)
+    if (is.call(expr)) {
+      # Check if the call is exactly ::
+      if (identical(expr[[1]], quote(`::`))) {
+        return(as.character(expr[[2]]))
       }
-      pkg_loc <- grep("^(package:|namespace:)", loc, value = TRUE)
-      if (!length(pkg_loc)) {
-        return(NULL)
-      }
-      sub("^(package:|namespace:)", "", pkg_loc)
-    })))
+      # Otherwise, recursively dig deeper into nested calls
+      return(unique(unlist(lapply(expr, extract_pkgs))))
+    }
+
+    # Base case: not a call, return nothing
+    return(NULL)
   }
 
+  # Apply walker to both fit and preds
   pkgs <- unique(unlist(lapply(learners, function(x) {
-    unique(c(extract_pkgs(x$fit), extract_pkgs(x$preds)))
+    c(extract_pkgs(x$fit), extract_pkgs(x$preds))
   })))
 
+  # Clean up and ensure enfold is always present
   pkgs <- setdiff(pkgs, "base")
   unique(c(pkgs, "enfold"))
 }

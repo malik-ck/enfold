@@ -30,12 +30,16 @@
 #'   correlation is used.
 #' @param min_vars Positive integer. Minimum number of variables to retain
 #'   even if fewer than \code{min_vars} pass the cutoff. Default \code{2}.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns a
 #'   column-subset of the input data.
 #' @seealso \code{\link{scr_lasso}}, \code{\link{scr_ranger}},
 #'   \code{\link{make_pipeline}}
 #' @export
-scr_correlation <- function(name, cutoff = 0.1, abs = TRUE, min_vars = 2L) {
+scr_correlation <- function(name, cutoff = 0.1, abs = TRUE, min_vars = 2L, parameters = NULL) {
   if (min_vars < 1L || !is.numeric(min_vars) || length(min_vars) != 1L) {
     stop("'min_vars' must be a single positive integer.", call. = FALSE)
   }
@@ -74,7 +78,7 @@ scr_correlation <- function(name, cutoff = 0.1, abs = TRUE, min_vars = 2L) {
     cutoff = 0.1,
     abs = TRUE,
     min_vars = 2L
-  )(name = name, cutoff = cutoff, abs = abs, min_vars = min_vars)
+  )(name = name, cutoff = cutoff, abs = abs, min_vars = min_vars, parameters = parameters)
 }
 
 #' LASSO (or elastic net) variable screener
@@ -94,6 +98,10 @@ scr_correlation <- function(name, cutoff = 0.1, abs = TRUE, min_vars = 2L) {
 #'   regularisation path is fitted and the \eqn{\lambda} whose number of
 #'   non-zero coefficients is closest to \code{n_vars} is used.  Exactly one of
 #'   \code{lambda} or \code{n_vars} must be supplied.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns a
 #'   numeric matrix containing only the selected columns.
 #' @seealso \code{\link{scr_correlation}}, \code{\link{scr_ranger}},
@@ -105,7 +113,7 @@ scr_correlation <- function(name, cutoff = 0.1, abs = TRUE, min_vars = 2L) {
 #' ncol(predict(fitted, newdata = mtcars[, -1]))  # 5 columns
 #' }
 #' @export
-scr_lasso <- function(name, alpha = 1, lambda = NULL, n_vars = NULL) {
+scr_lasso <- function(name, alpha = 1, lambda = NULL, n_vars = NULL, parameters = NULL) {
   .msg_pkg("glmnet")
 
   if (is.null(lambda) && is.null(n_vars)) {
@@ -183,7 +191,7 @@ scr_lasso <- function(name, alpha = 1, lambda = NULL, n_vars = NULL) {
     alpha = 1,
     lambda = NULL,
     n_vars = NULL
-  )(name = name, alpha = alpha, lambda = lambda, n_vars = n_vars)
+  )(name = name, alpha = alpha, lambda = lambda, n_vars = n_vars, parameters = parameters)
 }
 
 
@@ -198,6 +206,10 @@ scr_lasso <- function(name, alpha = 1, lambda = NULL, n_vars = NULL) {
 #'   \code{"impurity"} (default, Gini/variance impurity) or
 #'   \code{"permutation"} (out-of-bag permutation importance, slower but more
 #'   reliable for correlated predictors).
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns a
 #'   numeric matrix containing only the selected columns.
 #' @seealso \code{\link{scr_correlation}}, \code{\link{scr_lasso}},
@@ -209,7 +221,7 @@ scr_lasso <- function(name, alpha = 1, lambda = NULL, n_vars = NULL) {
 #' ncol(predict(fitted, newdata = mtcars[, -1]))  # 4 columns
 #' }
 #' @export
-scr_ranger <- function(name, n_vars, importance = "impurity") {
+scr_ranger <- function(name, n_vars, importance = "impurity", parameters = NULL) {
   .msg_pkg("ranger")
 
   if (missing(n_vars)) {
@@ -260,7 +272,7 @@ scr_ranger <- function(name, n_vars, importance = "impurity") {
     },
     n_vars,
     importance = "impurity"
-  )(name = name, n_vars = n_vars, importance = importance)
+  )(name = name, n_vars = n_vars, importance = importance, parameters = parameters)
 }
 
 #' Truncated SVD basis-expansion screener
@@ -279,6 +291,10 @@ scr_ranger <- function(name, n_vars, importance = "impurity") {
 #' @param scale Logical. If \code{FALSE} (default), no column scaling is
 #'   applied.  Set to \code{TRUE} to divide each column by its standard
 #'   deviation, which is advisable when predictors are on very different scales.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns an
 #'   \eqn{n \times k} numeric matrix of projected scores.
 #' @seealso \code{\link{scr_correlation}}, \code{\link{bex_splines}},
@@ -288,7 +304,7 @@ scr_ranger <- function(name, n_vars, importance = "impurity") {
 #' fitted <- fit(scr, x = as.matrix(mtcars[, -1]), y = mtcars$mpg)
 #' dim(predict(fitted, newdata = as.matrix(mtcars[, -1])))  # n x 3
 #' @export
-scr_svd <- function(name, n_components, center = TRUE, scale = FALSE) {
+scr_svd <- function(name, n_components, center = TRUE, scale = FALSE, parameters = NULL) {
   if (!requireNamespace("RSpectra", quietly = TRUE)) {
     message(
       "Package 'RSpectra' not found; scr_svd will use base R's svd(), which may be slow for large datasets.\nInstall 'RSpectra' for faster truncated SVD.",
@@ -355,5 +371,5 @@ scr_svd <- function(name, n_components, center = TRUE, scale = FALSE) {
     n_components,
     center = TRUE,
     scale = FALSE
-  )(name = name, n_components = n_components, center = center, scale = scale)
+  )(name = name, n_components = n_components, center = center, scale = scale, parameters = parameters)
 }

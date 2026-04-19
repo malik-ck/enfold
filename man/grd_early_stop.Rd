@@ -5,27 +5,19 @@
 \title{Early-stopping hyperparameter search grid constructor}
 \usage{
 grd_early_stop(
-  name_prefix,
-  learner_object,
-  parameters,
-  directory = NULL,
+  grid,
   seed = NULL,
   max_candidates = NULL,
   n_early_stop = 10L,
   tol = 0.01,
-  score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
+  score = make_score(loss_gaussian())
 )
 }
 \arguments{
-\item{name_prefix}{Character. Prefix for generated learner names.}
-
-\item{learner_object}{An \code{enfold_learner}, \code{enfold_pipeline}, or
-\code{enfold_list} instance to search over.}
-
-\item{parameters}{An \code{enfold_hyperparameters} object.}
-
-\item{directory}{\code{NULL} for a plain learner, or a character vector
-naming the target node inside a pipeline.}
+\item{grid}{A bare \code{enfold_grid} (created via
+\code{lrn_*(name, parameters = ...)}) or an \code{enfold_pipeline}
+containing exactly one embedded bare grid node. Name, learner, and
+hyperparameter specification are derived automatically.}
 
 \item{seed}{Integer or \code{NULL}. Passed to \code{set.seed()} before
 sampling candidates.}
@@ -55,14 +47,20 @@ when no meaningful improvement has been observed for
 }
 \examples{
 \dontrun{
-params <- specify_hyperparameters(num.trees = c(100L, 200L, 500L))
-grid   <- grd_early_stop("rf", lrn_ranger("rf"), params, n_early_stop = 2L)
+grid <- grd_early_stop(
+  lrn_ranger("rf", parameters = specify_hyperparameters(
+    num.trees = make_discrete(100L, 200L, 500L)
+  )),
+  n_early_stop = 2L
+)
 
-# Pipeline with branching paths: supply a metalearner to combine them
-pipe   <- make_pipeline(some_screener, list(lrn_glm("glm", gaussian()), lrn_mean("mean")))
-params <- specify_hyperparameters(threshold = c(5L, 10L, 20L))
-grid   <- grd_early_stop(
-  "pipe_grid", pipe, params,
+# Pipeline: embed the bare grid node, then wrap the pipeline
+rf_bare <- lrn_ranger("rf", parameters = specify_hyperparameters(
+  num.trees = make_discrete(100L, 200L, 500L)
+))
+pipe <- make_pipeline(some_screener, list(lrn_glm("glm", gaussian()), rf_bare))
+grid <- grd_early_stop(
+  pipe,
   score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 )
 }

@@ -32,7 +32,11 @@
 #' # Higher-is-better score (e.g. negative loss or accuracy)
 #' make_score(loss_gaussian(), higher_is_better = TRUE)
 #' @export
-make_score <- function(loss_function, metalearner = NULL, higher_is_better = FALSE) {
+make_score <- function(
+  loss_function,
+  metalearner = NULL,
+  higher_is_better = FALSE
+) {
   if (!inherits(loss_function, "mtl_loss")) {
     stop(
       "`loss_function` must be an `mtl_loss` object (e.g. `loss_gaussian()`).",
@@ -41,7 +45,10 @@ make_score <- function(loss_function, metalearner = NULL, higher_is_better = FAL
   }
   if (
     !is.null(metalearner) &&
-      !inherits(metalearner, c("enfold_learner", "enfold_pipeline", "enfold_list"))
+      !inherits(
+        metalearner,
+        c("enfold_learner", "enfold_pipeline", "enfold_list")
+      )
   ) {
     stop(
       "`metalearner` must be an `enfold_learner`, `enfold_pipeline`, or `enfold_list` (or NULL).",
@@ -57,8 +64,8 @@ make_score <- function(loss_function, metalearner = NULL, higher_is_better = FAL
   }
   structure(
     list(
-      loss_function    = loss_function,
-      metalearner      = metalearner,
+      loss_function = loss_function,
+      metalearner = metalearner,
       higher_is_better = higher_is_better
     ),
     class = "enfold_score"
@@ -84,29 +91,27 @@ print.enfold_score <- function(x, ...) {
 #' \code{enfold_grid} using random hyperparameter sampling via
 #' \code{\link{draw}}.
 #'
-#' @param name_prefix Character. Prefix for generated learner names
-#'   (e.g. \code{"rf"} yields names like \code{"rf/num.trees=500,mtry=3"}).
-#' @param learner_object An \code{enfold_learner}, \code{enfold_pipeline}, or
-#'   \code{enfold_list} instance to search over.
-#' @param parameters An \code{enfold_hyperparameters} object from
-#'   \code{\link{specify_hyperparameters}}.
+#' @param grid A bare \code{enfold_grid} (created via
+#'   \code{lrn_*(name, parameters = ...)}) or an \code{enfold_pipeline}
+#'   containing exactly one embedded bare grid node. Name, learner, and
+#'   hyperparameter specification are derived automatically.
 #' @param n_candidates Integer or \code{NULL}. Number of random draws.
 #'   When \code{NULL} and all parameters are discrete, all valid
 #'   combinations are evaluated.
 #' @param seed Integer or \code{NULL}. Passed to \code{set.seed()} before
 #'   drawing. \code{NULL} leaves the RNG state untouched.
-#' @param directory \code{NULL} for a plain learner, or a character vector
-#'   naming the target node inside a pipeline.
 #' @return An \code{enfold_grid} object.
 #' @seealso \code{\link{make_grid_factory}}, \code{\link{grd_early_stop}},
 #'   \code{\link{grd_bayes}}
 #' @examples
 #' \dontrun{
-#' params <- specify_hyperparameters(
-#'   num.trees = c(100L, 500L),
-#'   mtry      = c(2L, 4L)
+#' grid <- grd_random(
+#'   lrn_ranger("rf", parameters = specify_hyperparameters(
+#'     num.trees = make_discrete(100L, 500L),
+#'     mtry      = make_discrete(2L, 4L)
+#'   )),
+#'   n_candidates = 5L, seed = 42L
 #' )
-#' grid <- grd_random("rf", lrn_ranger("rf"), params, n_candidates = 5L, seed = 42L)
 #'
 #' x <- mtcars[, -1]; y <- mtcars$mpg
 #' task <- initialize_enfold(x, y) |>
@@ -117,7 +122,7 @@ print.enfold_score <- function(x, ...) {
 #' }
 #' @export
 grd_random <- make_grid_factory(
-  search = function(hyperparams, name_prefix, learner_object, directory, x, y, folds) {
+  search = function(search_space, learner, x, y, folds) {
     if (!is.null(n_candidates)) {
       if (
         !is.numeric(n_candidates) ||
@@ -131,36 +136,15 @@ grd_random <- make_grid_factory(
 
     if (!is.null(seed)) set.seed(seed)
 
-    all_discrete <- all(vapply(
-      hyperparams,
-      function(x) !inherits(x, "enfold_range"),
-      logical(1L)
-    ))
-
-    if (!all_discrete && is.null(n_candidates)) {
-      stop(
-        "At least one hyperparameter is continuous and `n_candidates` is NULL. ",
-        "Please specify `n_candidates`.",
-        call. = FALSE
-      )
-    }
-
-    combo_df <- draw(hyperparams, n = n_candidates)
-    combo_list <- lapply(
-      seq_len(nrow(combo_df)),
-      function(i) as.list(combo_df[i, , drop = FALSE])
-    )
+    combo_df   <- draw(search_space, n = n_candidates)
+    combo_list <- lapply(seq_len(nrow(combo_df)), function(i) combo_row(combo_df, i))
 
     results <- list()
     for (combo in combo_list) {
-      nm <- make_combo_name(name_prefix, combo)
       modified <- tryCatch(
-        change_arguments(learner_object, directory, combo, name = nm),
+        apply_combo(learner, combo),
         error = function(e) {
-          warning(sprintf(
-            "Grid '%s': change_arguments failed for '%s': %s",
-            name_prefix, nm, conditionMessage(e)
-          ))
+          warning(sprintf("Grid: apply_combo failed: %s", conditionMessage(e)))
           NULL
         }
       )
@@ -168,15 +152,12 @@ grd_random <- make_grid_factory(
       contrib <- tryCatch(
         cv_fit(modified, folds, x, y),
         error = function(e) {
-          warning(sprintf(
-            "Grid '%s': cv_fit failed for '%s': %s",
-            name_prefix, nm, conditionMessage(e)
-          ))
+          warning(sprintf("Grid: cv_fit failed: %s", conditionMessage(e)))
           NULL
         }
       )
       if (is.null(contrib) || !is.null(attr(contrib, "failed_learner"))) next
-      results <- c(results, list(list(name = nm, combo = combo, contrib = contrib)))
+      results <- c(results, list(list(combo = combo, contrib = contrib)))
     }
     results
   },
@@ -194,10 +175,10 @@ grd_random <- make_grid_factory(
 #' when no meaningful improvement has been observed for
 #' \code{n_early_stop} consecutive candidates.
 #'
-#' @param name_prefix Character. Prefix for generated learner names.
-#' @param learner_object An \code{enfold_learner}, \code{enfold_pipeline}, or
-#'   \code{enfold_list} instance to search over.
-#' @param parameters An \code{enfold_hyperparameters} object.
+#' @param grid A bare \code{enfold_grid} (created via
+#'   \code{lrn_*(name, parameters = ...)}) or an \code{enfold_pipeline}
+#'   containing exactly one embedded bare grid node. Name, learner, and
+#'   hyperparameter specification are derived automatically.
 #' @param seed Integer or \code{NULL}. Passed to \code{set.seed()} before
 #'   sampling candidates.
 #' @param max_candidates Integer or \code{NULL}. Maximum number of candidates
@@ -210,27 +191,31 @@ grd_random <- make_grid_factory(
 #'   specifying the loss function, an optional metalearner for multi-output
 #'   candidates, and the optimisation direction. Default
 #'   \code{make_score(loss_gaussian())}.
-#' @param directory \code{NULL} for a plain learner, or a character vector
-#'   naming the target node inside a pipeline.
 #' @return An \code{enfold_grid} object.
 #' @seealso \code{\link{make_grid_factory}}, \code{\link{make_score}},
 #'   \code{\link{grd_random}}, \code{\link{grd_bayes}}
 #' @examples
 #' \dontrun{
-#' params <- specify_hyperparameters(num.trees = c(100L, 200L, 500L))
-#' grid   <- grd_early_stop("rf", lrn_ranger("rf"), params, n_early_stop = 2L)
+#' grid <- grd_early_stop(
+#'   lrn_ranger("rf", parameters = specify_hyperparameters(
+#'     num.trees = make_discrete(100L, 200L, 500L)
+#'   )),
+#'   n_early_stop = 2L
+#' )
 #'
-#' # Pipeline with branching paths: supply a metalearner to combine them
-#' pipe   <- make_pipeline(some_screener, list(lrn_glm("glm", gaussian()), lrn_mean("mean")))
-#' params <- specify_hyperparameters(threshold = c(5L, 10L, 20L))
-#' grid   <- grd_early_stop(
-#'   "pipe_grid", pipe, params,
+#' # Pipeline: embed the bare grid node, then wrap the pipeline
+#' rf_bare <- lrn_ranger("rf", parameters = specify_hyperparameters(
+#'   num.trees = make_discrete(100L, 200L, 500L)
+#' ))
+#' pipe <- make_pipeline(some_screener, list(lrn_glm("glm", gaussian()), rf_bare))
+#' grid <- grd_early_stop(
+#'   pipe,
 #'   score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 #' )
 #' }
 #' @export
 grd_early_stop <- make_grid_factory(
-  search = function(hyperparams, name_prefix, learner_object, directory, x, y, folds) {
+  search = function(search_space, learner, x, y, folds) {
     if (inherits(score, "mtl_loss")) {
       stop(
         "`score` must be an `enfold_score` object, not an `mtl_loss`. ",
@@ -239,10 +224,7 @@ grd_early_stop <- make_grid_factory(
       )
     }
     if (!inherits(score, "enfold_score")) {
-      stop(
-        "`score` must be an `enfold_score` object from `make_score()`.",
-        call. = FALSE
-      )
+      stop("`score` must be an `enfold_score` object from `make_score()`.", call. = FALSE)
     }
 
     if (!is.null(max_candidates)) {
@@ -255,39 +237,18 @@ grd_early_stop <- make_grid_factory(
 
     if (!is.null(seed)) set.seed(seed)
 
-    all_discrete <- all(vapply(
-      hyperparams,
-      function(x) !inherits(x, "enfold_range"),
-      logical(1L)
-    ))
-
-    if (!all_discrete && is.null(max_candidates)) {
-      stop(
-        "At least one hyperparameter is continuous and `max_candidates` is NULL. ",
-        "Please specify `max_candidates`.",
-        call. = FALSE
-      )
-    }
-
-    combo_df <- draw(hyperparams, n = max_candidates)
-    combo_list <- lapply(
-      seq_len(nrow(combo_df)),
-      function(i) as.list(combo_df[i, , drop = FALSE])
-    )
+    combo_df   <- draw(search_space, n = max_candidates)
+    combo_list <- lapply(seq_len(nrow(combo_df)), function(i) combo_row(combo_df, i))
 
     best_score <- if (score$higher_is_better) -Inf else Inf
     no_improve <- 0L
-    results <- list()
+    results    <- list()
 
     for (combo in combo_list) {
-      nm <- make_combo_name(name_prefix, combo)
       modified <- tryCatch(
-        change_arguments(learner_object, directory, combo, name = nm),
+        apply_combo(learner, combo),
         error = function(e) {
-          warning(sprintf(
-            "Grid '%s': change_arguments failed for '%s': %s",
-            name_prefix, nm, conditionMessage(e)
-          ))
+          warning(sprintf("Grid: apply_combo failed: %s", conditionMessage(e)))
           NULL
         }
       )
@@ -295,17 +256,13 @@ grd_early_stop <- make_grid_factory(
       contrib <- tryCatch(
         cv_fit(modified, folds, x, y),
         error = function(e) {
-          warning(sprintf(
-            "Grid '%s': cv_fit failed for '%s': %s",
-            name_prefix, nm, conditionMessage(e)
-          ))
+          warning(sprintf("Grid: cv_fit failed: %s", conditionMessage(e)))
           NULL
         }
       )
       if (is.null(contrib) || !is.null(attr(contrib, "failed_learner"))) next
 
       scalar <- evaluate_score(score, contrib, y)
-
       if (!is.numeric(scalar) || length(scalar) != 1L || is.na(scalar)) {
         stop(
           "grd_early_stop: `score` produced a non-scalar result. ",
@@ -329,7 +286,7 @@ grd_early_stop <- make_grid_factory(
         no_improve <- no_improve + 1L
       }
 
-      results <- c(results, list(list(name = nm, combo = combo, contrib = contrib)))
+      results <- c(results, list(list(combo = combo, contrib = contrib)))
 
       if (no_improve >= n_early_stop) break
     }
@@ -340,7 +297,7 @@ grd_early_stop <- make_grid_factory(
   max_candidates = NULL,
   n_early_stop = 10L,
   tol = 0.01,
-  score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
+  score = make_score(loss_gaussian())
 )
 
 
@@ -352,10 +309,10 @@ grd_early_stop <- make_grid_factory(
 #' \code{enfold_grid} using Gaussian-process Bayesian optimisation to
 #' select candidate combinations.
 #'
-#' @param name_prefix Character. Prefix for generated learner names.
-#' @param learner_object An \code{enfold_learner}, \code{enfold_pipeline}, or
-#'   \code{enfold_list} instance to search over.
-#' @param parameters An \code{enfold_hyperparameters} object. All parameters
+#' @param grid A bare \code{enfold_grid} (created via
+#'   \code{lrn_*(name, parameters = ...)}) or an \code{enfold_pipeline}
+#'   containing exactly one embedded bare grid node. Name, learner, and
+#'   hyperparameter specification are derived automatically. All parameters
 #'   must be continuous \code{enfold_range} objects.
 #' @param n_init Integer. Number of random initial evaluations before
 #'   Bayesian updating begins. Default \code{5L}.
@@ -367,8 +324,6 @@ grd_early_stop <- make_grid_factory(
 #'   provided.
 #' @param seed Integer or \code{NULL}. Passed to \code{set.seed()} before
 #'   the optimisation run.
-#' @param directory \code{NULL} for a plain learner, or a character vector
-#'   naming the target node inside a pipeline.
 #' @return An \code{enfold_grid} object.
 #' @details
 #' Requires the \pkg{rBayesianOptimization} package. Discrete parameter
@@ -378,21 +333,25 @@ grd_early_stop <- make_grid_factory(
 #'   \code{\link{grd_random}}, \code{\link{grd_early_stop}}
 #' @examples
 #' \dontrun{
-#' params <- specify_hyperparameters(lambda = make_range(1e-4, 10))
-#' grid   <- grd_bayes(
-#'   "en", lrn_glmnet("en", gaussian()), params,
+#' grid <- grd_bayes(
+#'   lrn_glmnet("en", gaussian(), parameters = specify_hyperparameters(
+#'     lambda = make_range(1e-4, 10)
+#'   )),
 #'   score = make_score(loss_gaussian())
 #' )
 #'
 #' # Multi-output pipeline: supply a metalearner
+#' rf_bare <- lrn_ranger("rf", parameters = specify_hyperparameters(
+#'   num.trees = make_range(50, 500)
+#' ))
 #' grid <- grd_bayes(
-#'   "pipe", my_pipeline, params,
+#'   make_pipeline(my_screener, rf_bare),
 #'   score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 #' )
 #' }
 #' @export
 grd_bayes <- make_grid_factory(
-  search = function(hyperparams, name_prefix, learner_object, directory, x, y, folds) {
+  search = function(search_space, learner, x, y, folds) {
     if (inherits(score, "mtl_loss")) {
       stop(
         "`score` must be an `enfold_score` object, not an `mtl_loss`. ",
@@ -407,7 +366,8 @@ grd_bayes <- make_grid_factory(
       )
     }
 
-    not_range <- !vapply(hyperparams, inherits, logical(1L), "enfold_range")
+    hp        <- if (length(search_space) == 1L) search_space[[1L]] else flatten(search_space)
+    not_range <- !vapply(hp, inherits, logical(1L), "enfold_range")
     if (any(not_range)) {
       stop(
         sprintf(
@@ -415,7 +375,7 @@ grd_bayes <- make_grid_factory(
             "grd_bayes() requires all parameters to be continuous enfold_range objects. ",
             "Non-range parameters: %s."
           ),
-          paste(names(hyperparams)[not_range], collapse = ", ")
+          paste(names(hp)[not_range], collapse = ", ")
         ),
         call. = FALSE
       )
@@ -430,16 +390,14 @@ grd_bayes <- make_grid_factory(
 
     if (!is.null(seed)) set.seed(seed)
 
-    bounds <- lapply(hyperparams, function(p) c(p$min, p$max))
+    bounds <- lapply(hp, function(p) c(p$min, p$max))
 
     bayes_fn <- function(...) {
       combo <- list(...)
-      nm <- make_combo_name(name_prefix, combo)
-      modified <- tryCatch(
-        change_arguments(learner_object, directory, combo, name = nm),
-        error = function(e) NULL
-      )
-      if (is.null(modified)) return(list(Score = -Inf))
+      modified <- tryCatch(apply_combo(learner, combo), error = function(e) NULL)
+      if (is.null(modified)) {
+        return(list(Score = -Inf))
+      }
       contrib <- tryCatch(
         cv_fit(modified, folds, x, y),
         error = function(e) NULL
@@ -460,11 +418,10 @@ grd_bayes <- make_grid_factory(
     )
 
     best_combo <- as.list(opt$Best_Par)
-    best_nm    <- make_combo_name(name_prefix, best_combo)
-    best_mod   <- change_arguments(learner_object, directory, best_combo, name = best_nm)
+    best_mod <- apply_combo(learner, best_combo)
     best_contrib <- cv_fit(best_mod, folds, x, y)
 
-    list(list(name = best_nm, combo = best_combo, contrib = best_contrib))
+    list(list(combo = best_combo, contrib = best_contrib))
   },
   n_init = 5L,
   n_iter = 10L,
@@ -480,21 +437,23 @@ grd_bayes <- make_grid_factory(
 # For multi-output contrib, requires score$metalearner — errors if NULL.
 evaluate_score <- function(score, contrib, y) {
   if (length(contrib) == 1L) {
-    p   <- contrib[[1L]]
+    p <- contrib[[1L]]
     idx <- attr(p, "indices")
     return(mean(score$loss_function$loss_fun(subset_y(y, idx), p)))
   }
   if (is.null(score$metalearner)) {
     stop(
-      "The grid candidate produced ", length(contrib), " output stream(s) but ",
+      "The grid candidate produced ",
+      length(contrib),
+      " output stream(s) but ",
       "`score$metalearner` is NULL. ",
       "Provide a metalearner in make_score() to combine multi-output candidates.",
       call. = FALSE
     )
   }
-  idx       <- attr(contrib[[1L]], "indices")
-  y_sub     <- structure(subset_y(y, idx), indices = idx)
+  idx <- attr(contrib[[1L]], "indices")
+  y_sub <- structure(subset_y(y, idx), indices = idx)
   fitted_mtl <- fit(score$metalearner, x = contrib, y = y_sub)
-  preds     <- stats::predict(fitted_mtl, contrib)
+  preds <- stats::predict(fitted_mtl, contrib)
   mean(score$loss_function$loss_fun(subset_y(y, idx), preds))
 }

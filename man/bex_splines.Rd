@@ -4,7 +4,13 @@
 \alias{bex_splines}
 \title{B-spline or truncated power spline basis expander}
 \usage{
-bex_splines(name, type = c("bs", "tp"), degree = 3, max_knots = 10)
+bex_splines(
+  name,
+  type = c("bs", "tp"),
+  degree = 3,
+  max_knots = 10,
+  parameters = NULL
+)
 }
 \arguments{
 \item{name}{Character scalar. Name of the expander.}
@@ -18,6 +24,11 @@ default) or \code{"tp"} (truncated power splines, which combine well with ridge 
 column. For columns with fewer than \code{max_knots + 2} unique values
 the actual number of knots is capped automatically so the basis remains
 identifiable.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns a

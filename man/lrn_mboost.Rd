@@ -13,7 +13,8 @@ lrn_mboost(
   frm = NULL,
   max_df = 5,
   knots = 20,
-  df_factor = 0.99
+  df_factor = 0.99,
+  parameters = NULL
 )
 }
 \arguments{
@@ -41,6 +42,11 @@ learners. Default \code{20}.}
 
 \item{df_factor}{Numeric in \eqn{(0, 1]}. Scales the degrees of freedom
 relative to the number of unique values. Default \code{0.99}.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

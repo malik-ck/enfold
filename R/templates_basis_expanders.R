@@ -13,6 +13,10 @@
 #'   column. For columns with fewer than \code{max_knots + 2} unique values
 #'   the actual number of knots is capped automatically so the basis remains
 #'   identifiable.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns a
 #'   numeric matrix of spline basis columns, one block per input column.
 #' @details
@@ -44,7 +48,8 @@ bex_splines <- function(
   name,
   type = c("bs", "tp"),
   degree = 3,
-  max_knots = 10
+  max_knots = 10,
+  parameters = NULL
 ) {
   type <- match.arg(type)
   integer_checker(degree, "degree", require_positive = FALSE)
@@ -149,7 +154,7 @@ bex_splines <- function(
     type = "bs",
     degree = 3,
     max_knots = 10
-  )(name = name, type = type, degree = degree, max_knots = max_knots)
+  )(name = name, type = type, degree = degree, max_knots = max_knots, parameters = parameters)
 }
 
 
@@ -163,6 +168,10 @@ bex_splines <- function(
 #'   (default) adds all pairwise products; \code{3} additionally adds all
 #'   triple products, and so on.  For most SuperLearner use cases \code{2}
 #'   is plenty.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns a
 #'   numeric matrix containing main effects and all interaction columns.
 #' @seealso \code{\link{bex_splines}}, \code{\link{bex_formula}},
@@ -172,7 +181,7 @@ bex_splines <- function(
 #' fitted <- fit(bex, x = as.matrix(mtcars[, -1]), y = mtcars$mpg)
 #' dim(predict(fitted, newdata = as.matrix(mtcars[, -1])))
 #' @export
-bex_interactions <- function(name, depth = 2L) {
+bex_interactions <- function(name, depth = 2L, parameters = NULL) {
   integer_checker(depth, "depth")
 
   make_learner_factory(
@@ -209,7 +218,7 @@ bex_interactions <- function(name, depth = 2L) {
       mm[, object$col_nms, drop = FALSE]
     },
     depth = 2L
-  )(name = name, depth = depth)
+  )(name = name, depth = depth, parameters = parameters)
 }
 
 
@@ -229,6 +238,10 @@ bex_interactions <- function(name, depth = 2L) {
 #'   regression).
 #' @param min.node.size Positive integer or \code{NULL}. Minimum node size;
 #'   \code{NULL} uses the ranger default.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns an
 #'   \eqn{n \times \text{num.trees}} numeric matrix of individual tree
 #'   predictions.
@@ -244,7 +257,8 @@ bex_ranger <- function(
   name,
   num.trees = 100L,
   mtry = NULL,
-  min.node.size = NULL
+  min.node.size = NULL,
+  parameters = NULL
 ) {
   .msg_pkg("ranger")
 
@@ -300,7 +314,8 @@ bex_ranger <- function(
     name = name,
     num.trees = num.trees,
     mtry = mtry,
-    min.node.size = min.node.size
+    min.node.size = min.node.size,
+    parameters = parameters
   )
 }
 
@@ -313,6 +328,10 @@ bex_ranger <- function(
 #' @param formula A formula object specifying the desired basis expansion.
 #' The formula should use \code{.} to represent the predictor matrix and should not include a response variable.
 #' For example, \code{~ . + I(.^2) - 1} would add squared terms for each predictor without an intercept, while \code{~ . + age^2 + age*sex} would add squared and interaction terms for an \code{age} variable and a \code{sex} variable.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} whose \code{predict()} method returns the
 #'   numeric model matrix produced by applying \code{formula} to the new data.
 #' @details
@@ -325,7 +344,7 @@ bex_ranger <- function(
 #' fitted <- fit(bex, x = mtcars[, -1], y = mtcars$mpg)
 #' dim(predict(fitted, newdata = mtcars[, -1]))
 #' @export
-bex_formula <- function(name, formula) {
+bex_formula <- function(name, formula, parameters = NULL) {
   if (!inherits(formula, "formula")) {
     stop("'formula' must be a formula object.", call. = FALSE)
   }
@@ -365,5 +384,5 @@ bex_formula <- function(name, formula) {
       mm[, object$col_nms, drop = FALSE]
     },
     formula = formula
-  )(name = name, formula = formula)
+  )(name = name, formula = formula, parameters = parameters)
 }

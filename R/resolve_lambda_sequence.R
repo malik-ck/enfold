@@ -1,9 +1,9 @@
 #' Build a consistent lambda sequence for lrn_glmnet
 #'
-#' Returns an \code{enfold_lambda_request} sentinel that is passed to
+#' Returns an \code{enfold_lambda_request} that is passed to
 #' \code{\link{lrn_glmnet}} as its \code{lambda} argument.  The actual
 #' sequence is computed inside \code{lrn_glmnet} once \code{family},
-#' \code{alpha}, \code{frm}, and \code{offset} are in scope — so those
+#' \code{alpha}, \code{frm}, and \code{offset} are in scope, so those
 #' arguments never need to be repeated here.
 #'
 #' @param x Data to compute the sequence from. Accepts a plain matrix or data
@@ -27,7 +27,7 @@
 #'   lambda = make_lambda_sequence(x, y, nlambda = 50L))
 #' }
 #' @export
-make_lambda_sequence <- function(x, y = NULL, nlambda = 100L) {
+make_lambda_sequence <- function(x, y = NULL, nlambda = 30L) {
   structure(
     list(x = x, y = y, nlambda = nlambda),
     class = "enfold_lambda_request"
@@ -123,7 +123,7 @@ make_lambda_sequence <- function(x, y = NULL, nlambda = 100L) {
     quasibinomial = stats::quasibinomial(),
     quasipoisson = stats::quasipoisson(),
     stop(
-      "Only families that have equivalents in the stats-package are allowed in lrn_glmnet",
+      "Only families that have equivalents in the stats-package are allowed in lrn_glmnet.",
       call. = FALSE
     )
   )
@@ -132,7 +132,7 @@ make_lambda_sequence <- function(x, y = NULL, nlambda = 100L) {
 .lambda_max_glmnet <- function(x, y, family, alpha) {
   nobs <- nrow(x)
   weights <- rep(1 / nobs, nobs)
-  mu <- rep(weighted.mean(y, weights), nobs)
+  mu <- rep(stats::weighted.mean(y, weights), nobs)
   eta <- family$linkfun(mu)
   v <- family$variance(mu)
   m.e <- family$mu.eta(eta)

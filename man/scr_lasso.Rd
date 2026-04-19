@@ -4,7 +4,7 @@
 \alias{scr_lasso}
 \title{LASSO (or elastic net) variable screener}
 \usage{
-scr_lasso(name, alpha = 1, lambda = NULL, n_vars = NULL)
+scr_lasso(name, alpha = 1, lambda = NULL, n_vars = NULL, parameters = NULL)
 }
 \arguments{
 \item{name}{Character scalar. Name of the screener.}
@@ -21,6 +21,11 @@ must be supplied.}
 regularisation path is fitted and the \eqn{\lambda} whose number of
 non-zero coefficients is closest to \code{n_vars} is used.  Exactly one of
 \code{lambda} or \code{n_vars} must be supplied.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns a

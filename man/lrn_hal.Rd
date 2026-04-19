@@ -11,7 +11,8 @@ lrn_hal(
   frm = NULL,
   max_degree = 2,
   smoothness_orders = 1,
-  num_knots = 50
+  num_knots = 50,
+  parameters = NULL
 )
 }
 \arguments{
@@ -33,9 +34,15 @@ Default \code{1}.}
 
 \item{num_knots}{Integer. Number of knots per basis function. Default
 \code{50}.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
-An \code{enfold_learner} object.
+An \code{enfold_list} object. Fitting it
+creates 100 learners, one for each value of \eqn{\lambda} in the regularization path.
 }
 \description{
 Fits a Highly Adaptive Lasso via \code{hal9001::fit_hal}. Predictors are

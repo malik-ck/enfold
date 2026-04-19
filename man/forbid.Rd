@@ -25,8 +25,8 @@ Marks one or more parameter combinations as inadmissible so that
 }
 \examples{
 params <- specify_hyperparameters(
-  alpha  = c(0, 0.5, 1),
-  lambda = c(0.01, 0.1, 1)
+  alpha  = make_discrete(0, 0.5, 1),
+  lambda = make_discrete(0.01, 0.1, 1)
 ) |>
   forbid(alpha == 0 && lambda == 0.01)
 

@@ -8,7 +8,8 @@ mtl_superlearner(
   name,
   loss_fun = loss_gaussian(),
   max_iter = 1000,
-  tol = 1e-07
+  tol = 1e-07,
+  parameters = NULL
 )
 }
 \arguments{
@@ -23,6 +24,11 @@ Default \code{1000}.}
 
 \item{tol}{Numeric. Convergence tolerance (Frank-Wolfe gap). Default
 \code{1e-7}.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

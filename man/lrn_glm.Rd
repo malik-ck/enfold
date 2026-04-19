@@ -4,7 +4,7 @@
 \alias{lrn_glm}
 \title{Generalized linear model learner}
 \usage{
-lrn_glm(name, family, offset = NULL)
+lrn_glm(name, family, offset = NULL, parameters = NULL)
 }
 \arguments{
 \item{name}{Character. Name for this learner instance.}
@@ -15,6 +15,11 @@ from \code{y}.}
 
 \item{offset}{Character or \code{NULL}. Name of a column in \code{x} to
 use as an offset.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

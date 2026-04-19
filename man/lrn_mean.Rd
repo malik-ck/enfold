@@ -4,10 +4,15 @@
 \alias{lrn_mean}
 \title{Empirical mean learner}
 \usage{
-lrn_mean(name)
+lrn_mean(name, parameters = NULL)
 }
 \arguments{
 \item{name}{Character. Name for this learner instance.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

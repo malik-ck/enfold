@@ -4,7 +4,7 @@
 \alias{scr_svd}
 \title{Truncated SVD basis-expansion screener}
 \usage{
-scr_svd(name, n_components, center = TRUE, scale = FALSE)
+scr_svd(name, n_components, center = TRUE, scale = FALSE, parameters = NULL)
 }
 \arguments{
 \item{name}{Character scalar. Name of the screener.}
@@ -18,6 +18,11 @@ before the decomposition.}
 \item{scale}{Logical. If \code{FALSE} (default), no column scaling is
 applied.  Set to \code{TRUE} to divide each column by its standard
 deviation, which is advisable when predictors are on very different scales.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns an

@@ -4,7 +4,13 @@
 \alias{bex_ranger}
 \title{Random forest tree-prediction basis expander}
 \usage{
-bex_ranger(name, num.trees = 100L, mtry = NULL, min.node.size = NULL)
+bex_ranger(
+  name,
+  num.trees = 100L,
+  mtry = NULL,
+  min.node.size = NULL,
+  parameters = NULL
+)
 }
 \arguments{
 \item{name}{Character scalar. Name of the expander.}
@@ -18,6 +24,11 @@ regression).}
 
 \item{min.node.size}{Positive integer or \code{NULL}. Minimum node size;
 \code{NULL} uses the ranger default.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns an

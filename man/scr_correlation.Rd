@@ -4,7 +4,13 @@
 \alias{scr_correlation}
 \title{Correlation screener}
 \usage{
-scr_correlation(name, cutoff = 0.1, abs = TRUE, min_vars = 2L)
+scr_correlation(
+  name,
+  cutoff = 0.1,
+  abs = TRUE,
+  min_vars = 2L,
+  parameters = NULL
+)
 }
 \arguments{
 \item{name}{Character scalar. Name of the screener.}
@@ -17,6 +23,11 @@ correlation is used.}
 
 \item{min_vars}{Positive integer. Minimum number of variables to retain
 even if fewer than \code{min_vars} pass the cutoff. Default \code{2}.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns a

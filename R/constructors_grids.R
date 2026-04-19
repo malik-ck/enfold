@@ -1,134 +1,3 @@
-# ── change_arguments ──────────────────────────────────────────────────────
-
-#' Modify hyperparameters of a learner or a node inside a pipeline
-#'
-#' Returns a modified copy of \code{object} with hyperparameters updated
-#' according to \code{combo}. Does not mutate the original.
-#'
-#' For a plain \code{enfold_learner}, \code{directory} must be \code{NULL}.
-#' For an \code{enfold_pipeline}, \code{directory} is a character vector
-#' giving the name of the target node (and optionally the names of nested
-#' nodes for multi-level pipelines, e.g. \code{c("outer", "inner")}).
-#'
-#' @param object An \code{enfold_learner} or \code{enfold_pipeline}.
-#' @param directory \code{NULL} for a plain learner; a non-empty character
-#'   vector navigating to the target node for pipelines.
-#' @param combo A named list of hyperparameter values to apply. Merged into
-#'   the existing parameters via \code{modifyList}.
-#' @param name Optional new name for the returned object.
-#' @return A modified copy of \code{object}.
-#' @export
-change_arguments <- function(object, directory, combo, name = NULL) {
-  UseMethod("change_arguments")
-}
-
-#' @export
-change_arguments.enfold_learner <- function(
-  object,
-  directory,
-  combo,
-  name = NULL
-) {
-  if (!is.null(directory)) {
-    stop("'directory' must be NULL for a plain enfold_learner.", call. = FALSE)
-  }
-  new_p <- utils::modifyList(get_params(object), combo)
-  orig_fit <- get_original_fit(object)
-  orig_preds <- get_original_preds(object)
-  old_env <- environment(object$fit)
-
-  # New closure env with updated params; preserve parent chain
-  new_env <- list2env(new_p, parent = parent.env(old_env))
-  # Re-seat user functions in new env (environment<- uses copy-on-modify semantics)
-  environment(orig_fit) <- new_env
-  environment(orig_preds) <- new_env
-  new_env$fit <- orig_fit
-  new_env$preds <- orig_preds
-
-  # Recreate thin wrappers (mirrors make_learner_factory pattern)
-  new_wrapped_fit <- function(x, y) fit(x = x, y = y)
-  environment(new_wrapped_fit) <- new_env
-  new_wrapped_preds <- function(object, data) {
-    preds(object = object, data = data)
-  }
-  environment(new_wrapped_preds) <- new_env
-
-  new_obj <- object
-  new_obj$fit <- new_wrapped_fit
-  new_obj$preds <- new_wrapped_preds
-  if (!is.null(name)) {
-    new_obj$name <- name
-  }
-  new_obj
-}
-
-#' @export
-change_arguments.enfold_pipeline <- function(
-  object,
-  directory,
-  combo,
-  name = NULL
-) {
-  if (is.null(directory) || length(directory) == 0L) {
-    stop(
-      "'directory' must be a non-empty character vector for enfold_pipeline.",
-      call. = FALSE
-    )
-  }
-  target <- directory[[1L]]
-  sub_dir <- if (length(directory) > 1L) directory[-1L] else NULL
-
-  found <- FALSE
-  new_stages <- vector("list", length(object$stages))
-  for (s in seq_along(object$stages)) {
-    new_stages[[s]] <- vector("list", length(object$stages[[s]]))
-    for (j in seq_along(object$stages[[s]])) {
-      node <- object$stages[[s]][[j]]
-      if (!is_passthrough(node) && node$name == target) {
-        found <- TRUE
-        new_stages[[s]][[j]] <- if (!is.null(sub_dir)) {
-          change_arguments(node, sub_dir, combo, name = NULL)
-        } else {
-          # Rename node with combo so pipeline paths are distinguishable per combo
-          change_arguments(
-            node,
-            NULL,
-            combo,
-            name = make_combo_name(node$name, combo)
-          )
-        }
-      } else {
-        new_stages[[s]][[j]] <- node
-      }
-    }
-  }
-
-  if (!found) {
-    stop(
-      sprintf("Node '%s' not found in any pipeline stage.", target),
-      call. = FALSE
-    )
-  }
-
-  new_paths <- enumerate_paths(new_stages)
-  new_nms <- vapply(
-    new_paths,
-    function(p) path_name(new_stages, p),
-    character(1L)
-  )
-  new_paths_df <- build_paths_df(new_stages, new_paths)
-  structure(
-    list(
-      stages = new_stages,
-      paths = new_paths,
-      path_names = new_nms,
-      paths_df = new_paths_df
-    ),
-    class = "enfold_pipeline"
-  )
-}
-
-
 # ── make_grid_factory ─────────────────────────────────────────────────────
 
 #' Create a grid search factory
@@ -143,108 +12,63 @@ change_arguments.enfold_pipeline <- function(
 #' \code{\link{grd_early_stop}}, and \code{\link{grd_bayes}} are produced
 #' by this factory.
 #'
-#' @param search A function with arguments
-#'   \code{(hyperparams, name_prefix, learner_object, directory, x, y, folds)}
-#'   that implements the search strategy. \code{hyperparams} is an
-#'   \code{enfold_hyperparameters} object; the remaining arguments give the search
-#'   function direct access to the grid's learner object, pipeline directory,
-#'   the full data, and the cross-validation folds. The body of \code{search}
-#'   may freely reference any configuration parameter declared in \code{...}.
-#'   It must return a list of result objects, each with fields \code{$name}
-#'   (combo name string), \code{$combo} (named list of hyperparameter values),
-#'   and \code{$contrib} (named list of out-of-fold predictions for that
-#'   candidate, one entry per terminal output, each with
-#'   \code{attr(., "indices")} carrying the corresponding row indices).
-#' @param ... Configuration parameters. Bare names (e.g. \code{seed})
-#'   become required arguments of the returned constructor; named values
-#'   (e.g. \code{seed = NULL}) become optional arguments with defaults.
-#'   Names \code{name_prefix}, \code{learner_object}, \code{parameters},
-#'   \code{directory}, and \code{search} are reserved and will cause an error.
-#' @return A constructor
-#'   \code{function(name_prefix, learner_object, parameters, ..., directory = NULL)}
-#'   that builds an \code{enfold_grid} with the baked-in search engine.
-#' @details
-#' The closure environment of the resulting search engine contains only the
-#' configuration parameter values and the \code{search} function, nothing
-#' else.
+#' ## Calling the produced constructor
+#'
+#' The produced constructor accepts two usage forms:
+#'
+#' \describe{
+#'   \item{Bare-grid form}{
+#'     \code{grd_*(bare_grid, ...)} where \code{bare_grid} is an
+#'     \code{enfold_grid} without a search engine, created by passing
+#'     \code{parameters =} to a learner constructor. The learner, its
+#'     hyperparameter spec, and the internal \code{directory} are extracted
+#'     from the bare grid automatically.
+#'   }
+#'   \item{Pipeline form}{
+#'     \code{grd_*(pipeline, ...)} where \code{pipeline} is an
+#'     \code{enfold_pipeline} that contains exactly one embedded bare grid node.
+#'     All needed information is harvested automatically.
+#'   }
+#' }
+#'
+#' @param search A function with arguments \code{(search_space, learner, x, y, folds)}
+#'   that implements the search strategy. Call \code{apply_combo(learner, combo)} to
+#'   instantiate concrete learners from sampled parameter combinations.
+#' @param ... Configuration parameters for the search engine.
+#' @return A constructor that builds an \code{enfold_grid} with the baked-in
+#'   search engine.
 #' @seealso \code{\link{make_learner_factory}}, \code{\link{grd_random}},
 #'   \code{\link{grd_early_stop}}, \code{\link{grd_bayes}}
-#' @examples
-#' # A custom exhaustive search (evaluates every discrete combination).
-#' # Inside the search function, enfold's internal cross-validation helpers
-#' # are accessible automatically because the function runs in the package
-#' # namespace.
-#' grd_exhaustive <- make_grid_factory(
-#'   search = function(hyperparams, name_prefix, learner_object, directory, x, y, folds) {
-#'
-#'     combo_df <- draw(hyperparams, n = NULL)
-#'     results  <- list()
-#'
-#'     for (i in seq_len(nrow(combo_df))) {
-#'       combo <- as.list(combo_df[i, , drop = FALSE])
-#'       nm <- paste0(name_prefix, "/", paste(names(combo), combo, sep = "=", collapse = ","))
-#'       modified <- change_arguments(learner_object, directory, combo, name = nm)
-#'       contrib <- tryCatch(cv_fit(modified, folds, x, y), error = function(e) NULL)
-#'       if (is.null(contrib) || !is.null(attr(contrib, "failed_learner"))) next
-#'       results <- c(results, list(list(name = nm, combo = combo, contrib = contrib)))
-#'     }
-#'     results
-#'   }
-#' )
-#' \dontrun{
-#' params <- specify_hyperparameters(alpha = c(0, 0.5, 1))
-#' grid   <- grd_exhaustive("en", lrn_glmnet("en", gaussian()), params)
-#' }
 #' @export
 make_grid_factory <- function(search, ...) {
   factory_ns <- parent.env(environment())
   raw_dots <- substitute(list(...))[-1]
 
   # Validate search function signature
-  required_search_args <- c(
-    "hyperparams",
-    "name_prefix",
-    "learner_object",
-    "directory",
-    "x",
-    "y",
-    "folds"
-  )
+  required_search_args <- c("search_space", "learner", "x", "y", "folds")
   extra_search_args <- setdiff(names(formals(search)), required_search_args)
   if (length(extra_search_args) > 0) {
     stop(
-      "search must only have (hyperparams, name_prefix, learner_object, directory, x, y, folds) ",
-      "as arguments. Every configuration parameter you pass into make_grid_factory() is ",
-      "available inside search() via the closure, not as function arguments.",
+      "search must only have (search_space, learner, x, y, folds) as arguments. ",
+      "Every configuration parameter passed to make_grid_factory() ",
+      "is available via the closure.",
       call. = FALSE
     )
   }
 
   # Check for reserved names in config params
-  bad_names <- c(
-    "name_prefix",
-    "learner_object",
-    "parameters",
-    "search",
-    "directory"
-  )
+  bad_names <- c("grid", "search")
   clashing <- intersect(names(raw_dots), bad_names)
   if (length(clashing) > 0) {
     stop(
       "It is not allowed to pass arguments to 'make_grid_factory' ",
-      "named 'name_prefix', 'learner_object', 'parameters', 'directory', or 'search'. Clashing: ",
+      "named 'grid' or 'search'. Clashing: ",
       paste(clashing, collapse = ", "),
       call. = FALSE
     )
   }
 
-  # Build constructor formals: fixed grid args first, then config params
-  constr_args <- alist(
-    name_prefix = ,
-    learner_object = ,
-    parameters = ,
-    directory = NULL
-  )
+  constr_args <- alist(grid = )
 
   for (i in seq_along(raw_dots)) {
     arg_name <- names(raw_dots)[[i]]
@@ -259,39 +83,51 @@ make_grid_factory <- function(search, ...) {
   }
 
   constructor <- function() {}
-  config_param_names <- setdiff(
-    names(constr_args),
-    c("name_prefix", "learner_object", "parameters", "directory")
-  )
+  config_param_names <- setdiff(names(constr_args), "grid")
   formals(constructor) <- constr_args
 
   body(constructor) <- bquote({
+    if (inherits(grid, "enfold_grid")) {
+      if (!is.null(grid$search_engine)) {
+        stop(
+          "Cannot add a search engine to an enfold_grid that already has one.",
+          call. = FALSE
+        )
+      }
+      parameters <- grid$hyperparams
+      learner_object <- grid$learner_object
+      grid_name <- grid$name
+    } else if (inherits(grid, "enfold_pipeline")) {
+      extracted <- extract_bare_grid_from_pipeline(grid)
+      grid_name <- extracted$name
+      parameters <- extracted$parameters
+      learner_object <- grid # original pipeline stored directly
+    } else {
+      stop(
+        "The first argument to a grd_*() constructor must be a bare enfold_grid ",
+        "(created via lrn_*(name, parameters = ...)) or an enfold_pipeline ",
+        "containing at least one embedded bare grid node.",
+        call. = FALSE
+      )
+    }
+
     p <- mget(.(config_param_names), envir = environment())
 
-    # Minimal environment: only config params and search function
     closure_env <- list2env(p, parent = .(factory_ns))
-    environment(search) <- closure_env
-    closure_env$search <- search
+    search_copy <- search
+    environment(search_copy) <- closure_env
+    closure_env$search <- search_copy
 
-    wrapped_search <- function(
-      hyperparams,
-      name_prefix,
-      learner_object,
-      directory,
-      x,
-      y,
-      folds
-    ) {
-      search(hyperparams, name_prefix, learner_object, directory, x, y, folds)
+    wrapped_search <- function(search_space, learner, x, y, folds) {
+      search(search_space, learner, x, y, folds)
     }
     environment(wrapped_search) <- closure_env
 
     make_grid(
-      name_prefix,
+      grid_name,
       learner_object,
       parameters,
-      search_engine = wrapped_search,
-      directory = directory
+      search_engine = wrapped_search
     )
   })
 
@@ -300,16 +136,13 @@ make_grid_factory <- function(search, ...) {
 
 
 # ── make_grid ──────────────────────────────────────────────────────────────
-# Internal constructor used by make_grid_factory. Not exported.
-# Prefer the grd_* constructors (grd_random, grd_early_stop, grd_bayes) or
-# make_grid_factory() for custom grid searches.
+# Internal constructor. Prefer grd_* or make_bare_grid.
 
 make_grid <- function(
   name_prefix,
   learner_object,
   parameters,
-  search_engine,
-  directory = NULL
+  search_engine = NULL
 ) {
   if (
     !is.character(name_prefix) ||
@@ -335,19 +168,8 @@ make_grid <- function(
       call. = FALSE
     )
   }
-  if (!is.function(search_engine)) {
-    stop(
-      "`search_engine` must be a function.",
-      call. = FALSE
-    )
-  }
-  if (
-    !is.null(directory) && (!is.character(directory) || length(directory) == 0L)
-  ) {
-    stop(
-      "`directory` must be NULL or a non-empty character vector.",
-      call. = FALSE
-    )
+  if (!is.null(search_engine) && !is.function(search_engine)) {
+    stop("`search_engine` must be a function or NULL.", call. = FALSE)
   }
 
   structure(
@@ -355,11 +177,16 @@ make_grid <- function(
       name = name_prefix,
       learner_object = learner_object,
       hyperparams = parameters,
-      search_engine = search_engine,
-      directory = directory
+      search_engine = search_engine
     ),
     class = "enfold_grid"
   )
+}
+
+# Internal: create an enfold_grid without a search engine (bare grid).
+# Created when a learner constructor is called with parameters = specify_hyperparameters(...).
+make_bare_grid <- function(name, learner_object, parameters) {
+  make_grid(name, learner_object, parameters, search_engine = NULL)
 }
 
 
@@ -367,65 +194,124 @@ make_grid <- function(
 
 #' @export
 fit.enfold_grid <- function(object, x, y, ...) {
-  stop(
-    "Cannot call fit() on an enfold_grid directly. ",
-    "Pass it to add_learners() and let fit.enfold_task() with inner_cv non-NA handle it.",
-    call. = FALSE
+  # Check that passed parameters are all discrete (no ranges) since we have no search engine to resolve them
+  if (
+    any(
+      unlist(
+        lapply(
+          object$hyperparams,
+          function(p) {
+            inherits(p, "enfold_range") ||
+              (inherits(p, "enfold_mixture") && !p$discrete_mixture)
+          }
+        )
+      )
+    )
+  ) {
+    stop(
+      "Cannot fit an enfold_grid with hyperparameter ranges without a search engine.\n",
+      "Use a grd_* constructor or a custom search engine.",
+      call. = FALSE
+    )
+  }
+
+  if (!is.null(object$search_engine)) {
+    stop(
+      "fit() is disabled for grids with a search engine. ",
+      "Pass it to add_learners() and let fit.enfold_task() handle it.",
+      call. = FALSE
+    )
+  }
+  # draw() with n = NULL errors if any param is enfold_range, as intended
+  combo_df <- draw(object$hyperparams, n = NULL)
+  n_combos <- nrow(combo_df)
+  if (n_combos == 0L) {
+    stop("No valid hyperparameter combinations to fit.", call. = FALSE)
+  }
+
+  fitted_models <- vector("list", n_combos)
+  nms <- character(n_combos)
+  for (i in seq_len(n_combos)) {
+    combo <- combo_row(combo_df, i)
+    lrn <- apply_combo(object, combo)
+    nms[[i]] <- lrn$name
+    fitted_models[[i]] <- fit(lrn, x, y)
+  }
+  names(fitted_models) <- nms
+  structure(
+    list(name = object$name, models = fitted_models),
+    class = "enfold_grid_fitted"
   )
 }
+
+#' @export
+predict.enfold_grid_fitted <- function(object, newdata, ...) {
+  lapply(object$models, function(m) stats::predict(m, newdata = newdata))
+}
+
+#' @export
+print.enfold_grid_fitted <- function(x, ...) {
+  cat(sprintf(
+    "enfold_grid_fitted | '%s' | %d model(s)\n",
+    x$name,
+    length(x$models)
+  ))
+  for (nm in names(x$models)) {
+    cat(sprintf("  %s\n", nm))
+  }
+  invisible(x)
+}
+
 
 # ── internal helpers ──────────────────────────────────────────────────────
 
 # Build the resolved learner from grid + winning results.
-# Single winner → the modified object directly.
-# Multiple pipeline winners → expand the target stage with all winner nodes.
-# Multiple plain-learner winners → bundle into enfold_list.
+# Single winner (any)          → the modified object directly.
+# Multiple winners, plain      → bundle into enfold_list.
+# Multiple winners, single-node pipeline → expand the target stage with all winner nodes.
+# Multiple winners, multi-node pipeline  → bundle complete winner pipelines as enfold_list.
 build_resolved_learner <- function(grid, results) {
   is_pipeline <- inherits(grid$learner_object, "enfold_pipeline")
+  is_multi_node <- is_pipeline &&
+    any(grepl("/", names(grid$hyperparams), fixed = TRUE))
 
   if (length(results) == 1L) {
-    change_arguments(
-      grid$learner_object,
-      grid$directory,
-      results[[1L]]$combo,
-      name = results[[1L]]$name
+    apply_combo(grid, results[[1L]]$combo)
+  } else if (is_multi_node) {
+    pipelines <- lapply(results, function(r) apply_combo(grid, r$combo))
+    combo_names <- vapply(
+      results,
+      function(r) make_combo_name(grid$name, r$combo),
+      character(1L)
     )
-  } else if (is_pipeline && !is.null(grid$directory)) {
-    target_node <- find_stage_node(grid$learner_object, grid$directory[[1L]])
-    winner_nodes <- lapply(results, function(r) {
-      change_arguments(
-        target_node,
-        NULL,
-        r$combo,
-        name = make_combo_name(target_node$name, r$combo)
-      )
-    })
-    expand_pipeline_at_node(
-      grid$learner_object,
-      grid$directory[[1L]],
-      winner_nodes
-    )
+    make_modified_list_pipeline(grid$name, pipelines, combo_names)
+  } else if (is_pipeline) {
+    bare_node <- find_bare_grid_node(grid$learner_object, grid$name)
+    winner_nodes <- lapply(results, function(r) apply_combo(bare_node, r$combo))
+    expand_pipeline_at_node(grid$learner_object, grid$name, winner_nodes)
   } else {
-    modified_lrns <- lapply(results, function(r) {
-      change_arguments(
-        grid$learner_object,
-        grid$directory,
-        r$combo,
-        name = r$name
-      )
-    })
-    make_modified_list_learner(grid$name, modified_lrns)
+    modified <- lapply(results, function(r) apply_combo(grid, r$combo))
+    make_modified_list_learner(grid$name, modified)
   }
 }
 
-# Extract the first node with the given name from a pipeline's stages.
-find_stage_node <- function(pipeline, node_name) {
+# Find the first bare enfold_grid node (no search engine) with a given name.
+find_bare_grid_node <- function(pipeline, node_name) {
   for (stage in pipeline$stages) {
     for (node in stage) {
-      if (!is_passthrough(node) && node$name == node_name) return(node)
+      if (
+        inherits(node, "enfold_grid") &&
+          is.null(node$search_engine) &&
+          node$name == node_name
+      ) {
+        return(node)
+      }
     }
   }
-  stop(sprintf("Node '%s' not found in pipeline.", node_name), call. = FALSE)
+  stop(
+    sprintf("Bare grid node '%s' not found in pipeline.", node_name),
+    call. = FALSE
+  )
 }
 
 # Replace the single node named `target` in a pipeline with `replacement_nodes`
@@ -462,7 +348,6 @@ expand_pipeline_at_node <- function(pipeline, target, replacement_nodes) {
 }
 
 # Bundle already-modified learner instances into an enfold_list.
-# Replaces the old make_grid_list_learner (which reconstructed from constructor+combos).
 make_modified_list_learner <- function(name_prefix, modified_learners) {
   lrn_names <- vapply(modified_learners, `[[`, character(1L), "name")
   short_nms <- sub(paste0("^", name_prefix, "/"), "", lrn_names)
@@ -472,12 +357,18 @@ make_modified_list_learner <- function(name_prefix, modified_learners) {
     stats::setNames(models, short_nms)
   }
   preds_fn <- function(object, data) {
-    stats::setNames(
-      lapply(names(object), function(nm) {
-        stats::predict(object[[nm]], newdata = data)
-      }),
-      names(object)
-    )
+    out <- list()
+    for (nm in names(object)) {
+      inner_preds <- stats::predict(object[[nm]], newdata = data)
+      if (is.list(inner_preds) && !is.data.frame(inner_preds)) {
+        for (inner_nm in names(inner_preds)) {
+          out[[paste0(nm, "/", inner_nm)]] <- inner_preds[[inner_nm]]
+        }
+      } else {
+        out[[nm]] <- inner_preds
+      }
+    }
+    out
   }
   structure(
     list(name = name_prefix, fit = fit_fn, preds = preds_fn),
@@ -485,28 +376,128 @@ make_modified_list_learner <- function(name_prefix, modified_learners) {
   )
 }
 
+# Bundle multiple concrete pipelines (from a multi-node grid search) into an
+# enfold_list. fit_fn trains each independently; preds_fn flattens all path
+# predictions into one named list matching the flat CV output from the search.
+make_modified_list_pipeline <- function(name_prefix, pipelines, combo_names) {
+  fit_fn <- function(x, y) {
+    models <- lapply(pipelines, function(pl) fit(pl, x, y))
+    stats::setNames(models, combo_names)
+  }
+  preds_fn <- function(object, data) {
+    out <- list()
+    for (nm in names(object)) {
+      path_preds <- stats::predict(object[[nm]], newdata = data)
+      for (pnm in names(path_preds)) {
+        out[[pnm]] <- path_preds[[pnm]]
+      }
+    }
+    out
+  }
+  structure(
+    list(name = name_prefix, fit = fit_fn, preds = preds_fn),
+    class = c("enfold_list", "enfold_learner")
+  )
+}
+
+# Scan a pipeline for bare enfold_grid nodes (no search engine).
+# Returns name and hyperparams for the constructor; the original pipeline is
+# used as learner_object so apply_combo can find and replace the node(s) at fit time.
+# Single node: returns name = node$name, parameters = node$hyperparams (unchanged).
+# Multiple nodes: returns name = paste(node_names, "+"), parameters = combined
+#   enfold_hyperparameters with "node/param" style keys.
+extract_bare_grid_from_pipeline <- function(pipeline) {
+  grid_locations <- list()
+  for (s in seq_along(pipeline$stages)) {
+    for (j in seq_along(pipeline$stages[[s]])) {
+      node <- pipeline$stages[[s]][[j]]
+      if (inherits(node, "enfold_grid") && is.null(node$search_engine)) {
+        grid_locations <- c(
+          grid_locations,
+          list(list(s = s, j = j, node = node))
+        )
+      }
+    }
+  }
+
+  if (length(grid_locations) == 0L) {
+    stop(
+      "Pipeline contains no embedded hyperparameter specification (no bare enfold_grid node). ",
+      "Use specify_hyperparameters() in a learner constructor before adding it as a pipeline stage.",
+      call. = FALSE
+    )
+  }
+
+  if (length(grid_locations) == 1L) {
+    gn <- grid_locations[[1L]]$node
+    return(list(name = gn$name, parameters = gn$hyperparams))
+  }
+
+  all_params <- list()
+  for (loc in grid_locations) {
+    node <- loc$node
+    for (nm in names(node$hyperparams)) {
+      all_params[[paste0(node$name, "/", nm)]] <- node$hyperparams[[nm]]
+    }
+  }
+  node_names <- vapply(grid_locations, function(l) l$node$name, character(1L))
+  list(
+    name = paste(node_names, collapse = "+"),
+    parameters = structure(all_params, class = "enfold_hyperparameters")
+  )
+}
+
 
 # ── print methods ──────────────────────────────────────────────────────────
 
 #' @export
-print.enfold_range <- function(x, ...) {
-  cat(sprintf("enfold_range [%g, %g]\n", x$min, x$max))
-  invisible(x)
-}
-
-#' @export
 print.enfold_grid <- function(x, ...) {
-  cat(sprintf("enfold_grid | prefix: '%s'\n", x$name))
-  cat("  Hyperparameters:\n")
-  for (nm in names(x$hyperparams)) {
-    val <- x$hyperparams[[nm]]
-    if (inherits(val, "enfold_range")) {
-      cat(sprintf("    %s: enfold_range [%g, %g]\n", nm, val$min, val$max))
-    } else {
-      cat(sprintf("    %s: %s\n", nm, paste(val, collapse = ", ")))
+  engine_str <- if (is.null(x$search_engine)) "none (bare)" else "present"
+  cat(sprintf(
+    "enfold_grid | prefix: '%s' | search engine: %s\n",
+    x$name,
+    engine_str
+  ))
+  is_multi_node <- any(grepl("/", names(x$hyperparams), fixed = TRUE))
+  if (is_multi_node) {
+    node_names <- unique(sub("/.*", "", names(x$hyperparams)))
+    for (node_nm in node_names) {
+      cat(sprintf("  Node '%s':\n", node_nm))
+      node_keys <- grep(
+        paste0("^", node_nm, "/"),
+        names(x$hyperparams),
+        value = TRUE
+      )
+      for (nm in node_keys) {
+        param_nm <- sub(paste0("^", node_nm, "/"), "", nm)
+        val <- x$hyperparams[[nm]]
+        cat(sprintf("    %s: %s\n", param_nm, format_hyperparam(val)))
+      }
+    }
+  } else {
+    cat("  Hyperparameters:\n")
+    for (nm in names(x$hyperparams)) {
+      val <- x$hyperparams[[nm]]
+      cat(sprintf("    %s: %s\n", nm, format_hyperparam(val)))
     }
   }
   invisible(x)
+}
+
+format_hyperparam <- function(val) {
+  if (inherits(val, "enfold_range")) {
+    sprintf("enfold_range [%g, %g]", val$min, val$max)
+  } else if (inherits(val, "enfold_discrete")) {
+    n <- length(val$values)
+    preview <- utils::head(val$values, 3L)
+    pstr <- paste(vapply(preview, deparse, character(1L)), collapse = ", ")
+    if (n > 3L) {
+      pstr <- paste0(pstr, ", ...")
+    }
+    sprintf("make_discrete(%s)", pstr)
+  } else {
+    paste(val, collapse = ", ")
+  }
 }
 
 

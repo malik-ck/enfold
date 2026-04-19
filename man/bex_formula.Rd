@@ -4,7 +4,7 @@
 \alias{bex_formula}
 \title{Formula-based basis expander}
 \usage{
-bex_formula(name, formula)
+bex_formula(name, formula, parameters = NULL)
 }
 \arguments{
 \item{name}{Character scalar. Name of the expander.}
@@ -12,6 +12,11 @@ bex_formula(name, formula)
 \item{formula}{A formula object specifying the desired basis expansion.
 The formula should use \code{.} to represent the predictor matrix and should not include a response variable.
 For example, \code{~ . + I(.^2) - 1} would add squared terms for each predictor without an intercept, while \code{~ . + age^2 + age*sex} would add squared and interaction terms for an \code{age} variable and a \code{sex} variable.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} whose \code{predict()} method returns the

@@ -24,6 +24,30 @@
 #'  but you can use this argument to specify any packages that were missed.
 #' @param ... Ignored.
 #'
+#' @details
+#' \strong{Parallelism.} Set \code{future::plan()} before calling \code{fit()}.
+#' Three nesting levels are available:
+#' \enumerate{
+#'   \item Outer folds (\code{build_ensembles} / \code{fit_ensemble})
+#'   \item Learners within each outer fold
+#'   \item Inner folds within each learner
+#' }
+#' Supply a nested plan to exploit multiple levels simultaneously:
+#' \preformatted{
+#' plan(list(
+#'   tweak(multisession, workers = 4),  # outer folds
+#'   tweak(multisession, workers = 3),  # learners
+#'   tweak(multisession, workers = 2)   # inner folds
+#' ))
+#' }
+#' To parallelize outer and inner folds but keep learners sequential (useful
+#' when learner runtimes differ widely), insert \code{sequential} in the middle:
+#' \preformatted{
+#' plan(list(tweak(multisession, workers = 4), sequential, tweak(multisession, workers = 2)))
+#' }
+#' With \code{plan("sequential")} (the default), all three levels run sequentially
+#' at zero overhead.
+#'
 #' @return The same \code{enfold_task} with class updated to
 #'   \code{c("enfold_task_fitted", "enfold_task")} and the following fields
 #'   populated: \code{fit_objects}, \code{ensembles}, \code{is_cv_ensemble},
@@ -68,15 +92,6 @@ fit.enfold_task <- function(object, add_future_pkgs = NULL, ...) {
       call. = FALSE
     )
     object$metalearners <- list()
-  }
-
-  # Cross-validated ensembles require at least one metalearner
-  if (length(object$metalearners) == 0L && !is.null(cv$performance_sets)) {
-    stop(
-      "For cross-validated ensembles (outer_cv non-NULL), ",
-      "please provide at least one metalearner via add_metalearners().",
-      call. = FALSE
-    )
   }
 
   # Grid learners require inner CV
@@ -254,18 +269,29 @@ fit_ensemble <- function(x, y, perf_folds, learners, future_pkgs) {
     perf_folds,
     function(fold) {
       tr <- training_set(fold)
-      lapply(learners, function(lrn) {
-        fit(lrn, subset_x(x, tr), subset_y(y, tr))
-      })
+      future.apply::future_lapply(
+        learners,
+        function(lrn) fit(lrn, subset_x(x, tr), subset_y(y, tr)),
+        future.globals = list(
+          x        = x,
+          y        = y,
+          tr       = tr,
+          subset_x = subset_x,
+          subset_y = subset_y
+        ),
+        future.packages = c(future_pkgs, "enfold"),
+        future.seed = TRUE
+      )
     },
-    future.packages = future_pkgs,
+    future.packages = c(future_pkgs, "enfold"),
     future.globals = list(
-      x = x,
-      y = y,
-      learners = learners,
-      subset_y = subset_y,
-      subset_x = subset_x,
-      training_set = training_set,
+      x           = x,
+      y           = y,
+      learners    = learners,
+      future_pkgs = future_pkgs,
+      subset_y    = subset_y,
+      subset_x    = subset_x,
+      training_set               = training_set,
       `training_set.enfold_fold` = training_set.enfold_fold
     ),
     future.seed = TRUE
@@ -314,23 +340,45 @@ build_ensembles <- function(
     function(inner_folds) {
       all_idx <- unlist(lapply(inner_folds, validation_set))
 
-      preds_list <- list()
-      failed_learners <- character(0L)
+      # Level 2: parallel across learners
+      learner_results <- future.apply::future_lapply(
+        seq_along(learners),
+        function(i) {
+          lrn <- learners[[i]]
+          contrib <- cv_fit(lrn, inner_folds, x, y, future_pkgs = future_pkgs)
+          list(
+            i        = i,
+            contrib  = contrib,
+            failed   = attr(contrib, "failed_learner"),
+            resolved = attr(contrib, "resolved_learner")
+          )
+        },
+        future.globals = list(
+          cv_fit      = cv_fit,
+          learners    = learners,
+          inner_folds = inner_folds,
+          x           = x,
+          y           = y,
+          future_pkgs = future_pkgs
+        ),
+        future.packages = c(future_pkgs, "enfold"),
+        future.seed = TRUE
+      )
+
+      # Reduce phase
+      preds_list        <- list()
+      failed_learners   <- character(0L)
       resolved_learners <- vector("list", length(learners))
 
-      for (i in seq_along(learners)) {
-        lrn <- learners[[i]]
-        contrib <- cv_fit(lrn, inner_folds, x, y)
-        failed <- attr(contrib, "failed_learner")
-        if (!is.null(failed)) {
-          failed_learners <- c(failed_learners, failed)
+      for (r in learner_results) {
+        if (!is.null(r$failed)) {
+          failed_learners <- c(failed_learners, r$failed)
           next
         }
-        for (nm in names(contrib)) {
-          preds_list[[nm]] <- contrib[[nm]]
+        for (nm in names(r$contrib)) {
+          preds_list[[nm]] <- r$contrib[[nm]]
         }
-        rl <- attr(contrib, "resolved_learner")
-        if (!is.null(rl)) resolved_learners[[i]] <- rl
+        if (!is.null(r$resolved)) resolved_learners[[r$i]] <- r$resolved
       }
 
       if (length(preds_list) == 0L) {
@@ -358,18 +406,20 @@ build_ensembles <- function(
     },
     future.packages = c(future_pkgs, "enfold"),
     future.globals = list(
-      x = x,
-      y = y,
-      learners = learners,
+      x            = x,
+      y            = y,
+      learners     = learners,
       metalearners = metalearners,
-      combine_preds = combine_preds,
-      subset_y = subset_y,
-      subset_x = subset_x,
+      future_pkgs  = future_pkgs,
+      cv_fit       = cv_fit,
+      combine_preds        = combine_preds,
+      subset_y             = subset_y,
+      subset_x             = subset_x,
       get_lrn_display_name = get_lrn_display_name,
-      fit_predict_folds = fit_predict_folds,
-      training_set = training_set,
+      fit_predict_folds    = fit_predict_folds,
+      training_set               = training_set,
       `training_set.enfold_fold` = training_set.enfold_fold,
-      validation_set = validation_set,
+      validation_set               = validation_set,
       `validation_set.enfold_fold` = validation_set.enfold_fold
     ),
     future.seed = TRUE

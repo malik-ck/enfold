@@ -144,8 +144,8 @@ test_that("cv_fit pipeline: stage-1 failure excludes the entire pipeline", {
 ## ============================================================================
 
 test_that("cv_fit on a grid excludes only failing candidates", {
-  params <- specify_hyperparameters(should_fail = c(FALSE, TRUE))
-  grid <- grd_random("MF", lrn_maybe_fail("Failer"), params)
+  params <- specify_hyperparameters(should_fail = make_discrete(FALSE, TRUE))
+  grid <- grd_random(lrn_maybe_fail("MF", parameters = params))
 
   result <- expect_warning(
     cv_fit(grid, folds, x, y),
@@ -160,8 +160,8 @@ test_that("cv_fit on a grid excludes only failing candidates", {
 })
 
 test_that("cv_fit on a grid returns failed_learner when all candidates fail", {
-  params <- specify_hyperparameters(should_fail = c(TRUE))
-  grid <- grd_random("MF", lrn_maybe_fail("Failer"), params)
+  params <- specify_hyperparameters(should_fail = make_discrete(TRUE))
+  grid <- grd_random(lrn_maybe_fail("MF", parameters = params))
 
   result <- expect_warning(
     cv_fit(grid, folds, x, y),
@@ -227,8 +227,8 @@ test_that("build_ensembles errors when all learners fail", {
 ## ============================================================================
 
 test_that("fit() with a grid where one candidate fails: surviving candidate used", {
-  params <- specify_hyperparameters(should_fail = c(FALSE, TRUE))
-  grid <- grd_random("MF", lrn_maybe_fail("Failer"), params)
+  params <- specify_hyperparameters(should_fail = make_discrete(FALSE, TRUE))
+  grid <- grd_random(lrn_maybe_fail("MF", parameters = params))
 
   task <- initialize_enfold(x, y) |>
     add_learners(grid) |>
@@ -245,8 +245,8 @@ test_that("fit() with a grid where one candidate fails: surviving candidate used
 })
 
 test_that("fit() with a grid where all candidates fail: grid excluded, error if no other learner", {
-  params <- specify_hyperparameters(should_fail = c(TRUE))
-  grid <- grd_random("MF", lrn_maybe_fail("Failer"), params)
+  params <- specify_hyperparameters(should_fail = make_discrete(TRUE))
+  grid <- grd_random(lrn_maybe_fail("MF", parameters = params))
 
   task <- initialize_enfold(x, y) |>
     add_learners(grid) |>
@@ -261,8 +261,8 @@ test_that("fit() with a grid where all candidates fail: grid excluded, error if 
 })
 
 test_that("fit() with grid where all fail but another good learner exists: ensemble uses survivor", {
-  params <- specify_hyperparameters(should_fail = c(TRUE))
-  grid <- grd_random("MF", lrn_maybe_fail("Failer"), params)
+  params <- specify_hyperparameters(should_fail = make_discrete(TRUE))
+  grid <- grd_random(lrn_maybe_fail("MF", parameters = params))
   good <- lrn_mean("Mean")
 
   task <- initialize_enfold(x, y) |>

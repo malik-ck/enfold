@@ -26,7 +26,14 @@ library(enfold)
 `enfold` (*ensemble fold*) is a package that makes model stacking and
 ensembling in R quick and convenient. Users have very fine-grained
 control over *how* ensembles are built, and ensembles can be
-cross-validated with ease.
+cross-validated with ease. There are two use cases with which in mind
+`enfold` was developed:
+
+- The use and evaluation of bespoke learners which are not implemented
+in any machine learning package, where friction-less learner template
+creation is important
+- Ensemble validation via nested cross-validation, say for nuisance
+model estimation in causal inference
 
 `enfold` is designed to be as type-agnostic as is reasonable. This means
 that the package internally does nothing to change the data you hand in.
@@ -59,10 +66,12 @@ package's internal structure.
 ## Data
 
 We use a simulated data set from the `enfold` package named
-`enfold_demo`. The outcome we are interested in predicting is `hba1c`,
-which reflects a person's average blood glucose level over roughly the
-preceding two to three months. It's used to both diagnose diabetes and
-to monitor glycemic control in people already diagnosed.
+`enfold_demo`. The outcome we are interested in predicting is `hba1c`.
+This is a common blood test result that reflects a person's average 
+blood glucose level over roughly the preceding two to three months. 
+It's used to both diagnose diabetes and to monitor glycemic control 
+in people already diagnosed. We want to predict `hba1c` from a number
+of demographic and medical predictors seen below:
 
 ```{r data}
 data("enfold_demo", package = "enfold")
@@ -71,6 +80,7 @@ predictors <- enfold_demo[, setdiff(names(enfold_demo), "hba1c")]
 outcome <- enfold_demo$hba1c
 
 cat("Rows:", nrow(predictors), "| Predictors:", ncol(predictors), "\n")
+cat("Predictor names:", paste(colnames(predictors), collapse = ", "), "\n")
 ```
 
 Using enfold now consists of five steps. First, we initialize a task by
@@ -82,8 +92,8 @@ will tell us how well our ensembles and learners did. Of course, we can
 also call `predict` on a fitted task to get predictions for all
 ensembles.
 
-In this guide, we will go in the order: initialize, cross-validation,
-learners, metalearners, fit, and then investigate the performance of our
+In this guide, we will go in the order: initialize, learners, metalearners, 
+cross-validate, fit, and then investigate the performance of our
 ensembles. Note that, when working on your own projects, you will
 probably want to explore your data before analyses. We omit this for brevity;
 the data are simulated such that they are well-behaved.
@@ -106,6 +116,10 @@ should be alleviated by ensuring that the data stored in `x` and `y` are
 never changed by the `enfold` task (only by learners that receive a copy
 of the data for fitting). Since their environment is locked, this can
 also not happen by accident.
+
+If you have large data or little memory, enfold has support for file-backed
+systems via the `bigstatsr` and `arrow` packages. Check the big data guide
+for more details.
 :::
 
 We can afterwards look at the slots inside the task:
@@ -281,7 +295,11 @@ Alternatively we could build an `enfold_cv` object separately with
 if we want to reuse the same fold splits across multiple tasks.
 
 ```{r folds-reuse, eval = FALSE}
-separate_cv <- create_cv_folds(n = nrow(predictors), inner_cv = 5L, outer_cv = 5L)
+separate_cv <- create_cv_folds(
+  n = nrow(predictors),
+  inner_cv = 5L,
+  outer_cv = 5L
+)
 
 task_separate_cv <- initialize_enfold(x = predictors, y = outcome) |>
   add_cv_folds(cv = separate_cv)
@@ -322,10 +340,15 @@ and instead pass it as part of our cross-validation instruction:
 chd <- enfold_demo$coronary_heart_disease
 
 # Remove it from our predictors
-predictors_no_chd <- predictors[, -which(colnames(enfold_demo) == "coronary_heart_disease")]
+predictors_no_chd <- predictors[,
+  -which(colnames(enfold_demo) == "coronary_heart_disease")
+]
 
 # Create a new task for illustration that stratifies cross-validation
-task_with_stratified_folds <- initialize_enfold(x = predictors_no_chd, y = outcome) |>
+task_with_stratified_folds <- initialize_enfold(
+  x = predictors_no_chd,
+  y = outcome
+) |>
   add_cv_folds(
     inner_cv = make_cv_function(
       origami::make_folds,
@@ -341,7 +364,6 @@ task_with_stratified_folds <- initialize_enfold(x = predictors_no_chd, y = outco
     )
   )
 ```
-
 :::
 
 ## Step 5 — Fit
@@ -356,9 +378,11 @@ task
 
 `enfold` can also fit in parallel across outer folds via the packages `future`
 and `future.apply`. To do this, we use `future::plan()` to create a parallelization
-plan ourselves, and then call `fit()`. The code below uses a multisession plan
-with four workers. To see how many workers you could use, check `future::availableCores()`,
-but be mindful of your computer's resources and the size of your data.
+plan ourselves, and then call `fit()`. 
+
+In `enfold`, parallelization can be done across three levels in total: across outer folds,
+across learners, and across inner folds. `enfold` also tries to parallelize in exactly this order.
+The code below uses a multisession plan with four workers.
 
 ```{r parallel, eval = FALSE}
 future::plan(future::multisession, workers = 4L)
@@ -366,73 +390,146 @@ task <- fit(task)
 future::plan(future::sequential) # reset afterwards
 ```
 
-## Step 6 — Evaluate
+Since we had `outer_cv` enabled, `enfold` parallelized over outer folds. If we had set `outer_cv`
+to `NA` instead, it would have cross-validated over learners. 
 
-### Cross-validated predictions
+If we have sufficiently many available workers on our machine, we can also set up a nested plan. 
+The creation of such a nested plan is shown below. If we called `fit()` after setting up the nested 
+plan below, we would parallelize across all three levels: outer folds, learners, and inner folds.
 
-`predict(task, type = "cv")` returns out-of-fold ensemble predictions
-stitched back together in the original observation order. When multiple
-metalearners are present, a named list is returned.
+```{r nested parallel, eval = FALSE}
+# Nested multisession plan
+plan(list(
+  tweak(multisession, workers = 2),
+  tweak(multisession, workers = 2),
+  tweak(multisession, workers = 2)
+))
+
+# If task was not yet fit, fit() here
+
+# Reset afterwards
+future::plan(future::sequential)
+```
+
+When parallelizing, and especially when  doing nested parallelization, be mindful
+of your computer's resources. Use `future::availableCores()` to see how many workers you can use.
+
+## Evaluating Ensembles after Fitting
+
+The main functions we can apply to our task after fitting are `predict()`, `risk()`, and `loss()`.
+`predict()` uses our ensemble to predict, `risk()` summarizes performance as mean loss over
+a user-specified loss function, and `loss()` gives us observation-level loss values. 
+Each of these functions has a `type` argument that controls whether we want to use cross-validated 
+predictions or predictions from one ensemble. Each also has a version post-fixed by `_learner` that
+evaluates all individual learners instead: `predict_learners()`, `risk_learners()`, and `loss_learners()`.
+
+Usually, if we cross-validate ensemble creation, we will use `type = "cv"`.
+This will re-use the outer fold specification to predict and calculate loss purely on
+out-of-fold data. However, if we want to use our cross-validated ensembles on an entirely
+new data set where the outer fold specification from the task does not apply anymore,
+we need to choose one of the ensembles to predict with via the `ensemble_fold_id` argument.
+A better alternative in such a scenario might be to re-fit the task with `outer_cv = NA`
+after evaluating cross-validated performance. This leaves us with one ensemble trained on
+the full data, and we can call `type = "ensemble` without ambiguity. Let us go through a few
+examples.
+
+### Cross-validated model evaluation
+
+If we call `predict()` with `type = "cv`, we get out-of-fold predictions given the outer folds
+from our task. The exact output format is determined by the metalearner used, though the
+built-in metalearners pre-fixed with `mtl_*` all output vectors.
 
 ```{r predict-cv}
 cv_preds <- predict(task, type = "cv")
+lapply(cv_preds, head)
 ```
 
-### Overall risk
+Attached to the cross-validated predictions is an `indices` attribute. If we used resampling
+schemes where one observation might end up in multiple validation schemes, this index
+tells us to which observation a prediction belongs. In most cases, it will simply count
+from `1` to `n`.
 
-`risk()` summarizes cross-validated performance as mean loss per
-metalearner.
+We can now calculate cross-validated risk and loss to compare metalearners.
+This requires passing a loss function to `loss()` and `risk()`. The default,
+`loss_gaussian()`, tends to do well for model comparison.
+To get a full picture of ensemble performance, we will also use the corresponding
+evaluation functions for learners.
 
-```{r risk}
+```{r risk and loss}
+# Ensemble and learner loss
+task_loss <- loss(task, loss_fun = loss_gaussian(), type = "cv")
+task_loss_learners <- loss_learners(
+  task,
+  loss_fun = loss_gaussian(),
+  type = "cv"
+)
+
+# Ensemble losses:
+head(task_loss)
+
+# Learner losses:
+head(task_loss_learners)
+
+# Ensemble and learner risks
+# Ensemble risks:
 risk(task, loss_fun = loss_gaussian(), type = "cv")
-```
 
-### Per-fold risk
-
-`fold_risk()` breaks the same summary down by outer fold, which is
-useful for assessing stability.
-
-```{r fold-risk}
-fold_risk(task, loss_fun = loss_gaussian())
-```
-
-### Observation-level loss
-
-`loss()` returns a data frame with one loss value per observation,
-enabling loss distribution plots and outlier inspection.
-
-```{r cv-loss}
-obs_loss <- loss(task, loss_fun = loss_gaussian(), type = "cv")
-head(obs_loss)
-```
-
-### Base-learner predictions and risk
-
-`predict_learners()` and `risk_learners()` expose the individual
-base-learner predictions before any metalearning, which helps to
-understand which learners contribute most.
-
-```{r learner-risk}
+# Learner risks:
 risk_learners(task, loss_fun = loss_gaussian(), type = "cv")
 ```
 
-### Predicting on new data
+As we can see, the GLM outperformed the mean learner significantly.
+The difference in risk between the selector and the metalearner is practically zero. 
+This can happen when one learner dominates so much that the superlearner wants to 
+assign all weight to it.
 
-`predict(task, type = "ensemble")` uses a fitted ensemble (not
-cross-validated) to score new observations. For a cross-validated task
-you must specify which outer-fold ensemble to use via
-`ensemble_fold_id`.
+One last evaluation function we can use that can only be used
+for cross-validated ensembles is the risk per fold, which
+gives an overview over the variability in risk over folds.
 
-```{r predict-new, eval = FALSE}
-new_preds <- predict(
-  task,
-  newdata = x[1:10, ],
-  type = "ensemble",
-  ensemble_fold_id = 1L
-)
+```{r per fold risk}
+fold_risk(task, loss_fun = loss_gaussian())
 ```
 
-## List learners
+### Single ensemble evaluation
+
+If we set `outer_cv = NA`, all functions besides `fold_risk` still work,
+but we only get a single ensemble trained on the full data. Using
+`loss()` and `risk()` therefore report on loss and risk determined in-sample,
+which is not an honest loss evaluation. However, fitting a single ensemble on
+full data is typically what we want to do to predict on entirely new data.
+Below is a brief example. We estimate an ensemble via a superlearner
+and three learners, and predict on new data:
+
+```{r outer off}
+one_ensemble_only <- initialize_enfold(x = predictors, y = outcome) |>
+  add_learners(
+    lrn_mean("Mean"),
+    lrn_glm("GLM", family = gaussian()),
+    lrn_ranger("Random Forest", num.trees = 200)
+  ) |>
+  add_metalearners(
+    mtl_superlearner("SL", loss_fun = loss_gaussian())
+  ) |>
+  add_cv_folds(inner_cv = 5L, outer_cv = NA) |>
+  fit()
+
+# Superlearner predictions can now be gotten on new data
+predict(one_ensemble_only, newdata = predictors[1:5, ], type = "ensemble")
+```
+
+## Advanced functionality
+
+You now know how to fit and evaluate ensembles via the `enfold` package!
+You can now use `enfold` for your own projects, or read the other guides
+to learn about some of the advanced functionality of the package.
+As a little teaser, the rest of this guide will briefly introduce list learners,
+pipelines, and grids. The former is a feature that `enfold` has and that is
+unique to it, while the latter two are important in many modern machine
+learning workflows. Taken together, standard learners, list learners,
+pipelines, and grids make up all the different types of learners in the `enfold` ecosystem.
+
+### List learners
 
 One key feature of `enfold` is that it can treat the output of one learner as
 multiple valid predictions. This is useful in many settings. A common example
@@ -441,29 +538,52 @@ by adding yet another layer of cross-validation to select the optimal regulariza
 strength, and the trained learner then uses the single best regularization strength
 to build ensembles. This is somewhat unfortunate: we build ensembles precisely
 to make decisions about which learners can contribute well to our final prediction,
-which means the computational overhead added by pre-selection is not well-spent.
-We might prefer instead to use the entire regularization path to build ensembles,
+and we might as well treat elastic nets with different regularization strengths as different learners.
+It is therefore an option to instead use the entire regularization path to build ensembles,
 which saves computational resources and evaluates regularization strength at the
 actual ensemble building step.
 
-The code block below shows how this works. We use the `lrn_glmnet` template
-and pass a lambda sequence via `make_lambda_sequence()` as the `lambda` argument.
-`make_lambda_sequence()` is designed to be passed directly: it captures the data
-and is resolved by `lrn_glmnet` using the learner's own family, alpha, and formula.
-Both raw data and an `enfold_task` are accepted as the first argument.
-The third argument, `nlambda`, controls how many lambda values to generate
-(default 100). It is good to use a generous `nlambda` since this does not increase
-computational time. We set `inner_cv = NA`, which is how we fit learners that output
-cross-validated predictions without ensembling.
+The code block below shows how this works. We use the `lrn_glmnet` template,
+which requires us to pass a regularization sequence ourselves via the `lambda` argument.
+We will use a function available through the `enfold` package named `make_lambda_sequence()`,
+which takes `x` and `y` as arguments to generate an appropriate regularization sequence.
+It also takes `nlambda` as an argument, which controls how many lambda values are generated
+(default: 30). It is good to use a generous `nlambda` since this does not increase
+computational time. The `glmnet` package defaults to 100, and `enfold` only defaults
+to less to prevent nasty memory surprises at predict time. We set `inner_cv = NA`, 
+which is how we fit learners that output cross-validated predictions without ensembling.
+We use a very small `nlambda` for this guide to make the output more readable.
 
-Code block here.
+```{r glmnet show}
+# Initialize lambda sequence creation
+lambda_seq <- make_lambda_sequence(x = predictors, y = outcome, nlambda = 10L)
+
+glmnet_task <- initialize_enfold(x = predictors, y = outcome) |>
+  add_learners(
+    lrn_glmnet("LASSO", alpha = 1, lambda = lambda_seq, family = "gaussian")
+  ) |>
+  add_cv_folds(inner_cv = NA, outer_cv = 5L) |>
+  fit()
+```
 
 What happens now if we use `predict_learners()` or `loss_learners()`?
 Simple: `enfold` knows that `lrn_glmnet` outputs a list of predictions,
 so it treats each entry as its separate learner. `loss_learners()` can therefore
-tell us what the optimal regularization strength for our data set is:
+tell us what the optimal regularization strength for our data set is.
 
-Code block here.
+```{r glmnet risk}
+risk_learners(glmnet_task, loss_fun = loss_gaussian(), type = "cv")
+
+# The minimizer only:
+setNames(
+  min(risk_learners(glmnet_task, loss_fun = loss_gaussian(), type = "cv")),
+  names(which.min(risk_learners(
+    glmnet_task,
+    loss_fun = loss_gaussian(),
+    type = "cv"
+  )))
+)
+```
 
 We can alternatively set `outer_cv = NA`, and enable `inner_cv`.
 While this prevents us from evaluating cross-validated losses along the regularization path, 
@@ -472,29 +592,19 @@ If we used `mtl_selector()` as metalearner here, we would emulate what `cv.glmne
 does with `s = "lambda.min"`: calling `predict` on the fitted task outputs only 
 the regularization strength deemed optimal.
 
-Code block here.
-
 There are many templates that are or can be list learners. An important example
 besides `lrn_glmnet()` is `lrn_xgboost()`, which can output a list of predictions
 after set numbers of boosting rounds.
-
-## Advanced functionality
-
-You now know how to fit and evaluate ensembles via the `enfold` package!
-You can now use `enfold` for your own projects, or read the other guides
-to learn about some of the advanced functionality of the package.
-As a little teaser, the rest of this guide will very briefly introduce
-pipelines and grids. Both are of large importance in modern machine learning
-workflows, and both have separate long-form guides for the interested user.
 
 ### Pipelines
 
 `make_pipeline()` chains learners so that each stage's output feeds into
 the next. This is useful for screeners, basis expanders, or
 post-processing steps. Branching within a stage creates one independent
-path per combination.
+path per combination. Similar to a list learner, a pipeline learner
+outputs a list of valid predictions, in this case one per terminal node.
 
-```{r pipelines, eval = FALSE}
+```{r pipelines, eval = TRUE}
 # A screener upstream, then two competing learners downstream
 pipe <- make_pipeline(
   scr_svd("Screener", n_components = 4),
@@ -504,28 +614,129 @@ pipe <- make_pipeline(
   )
 )
 
-task_pipe <- initialize_enfold(x, y) |>
+task_pipe <- initialize_enfold(x = predictors, y = outcome) |>
   add_learners(pipe) |>
   add_metalearners(mtl_selector("Selector")) |>
   add_cv_folds(inner_cv = 5L, outer_cv = 5L) |>
   fit()
-```
 
-`predict()` on a fitted pipeline returns a named list with one entry per
-path (e.g. `"screener/glm"`, `"screener/mean"`). Metalearners receive
-each path as an independent learner.
+# Example risk calculation, one per terminal node
+risk_learners(task_pipe, loss_fun = loss_gaussian(), type = "cv")
+```
 
 ### Hyperparameter grids
 
-`make_grid()` cross-validates a learner over a grid of hyperparameter
-combinations. It requires `inner_cv` to be non-`NULL`.
+Grids are how we can create multiple versions of one learner with
+different hyperparameters. We can include a grid as a standard learner,
+in which case all possible hyperparameter combinations are trained.
+We can also wrap a search engine around a grid, which allows us to search
+and optimize over admissible hyperparameter combinations. An example
+search engine is `grd_early_stop()`, which trains learners from random
+hyperparameter draws until validation error stops improving. One unique
+part of hyperparameter optimization in `enfold` is that search engines
+peek at ensemble building folds. In other words: `enfold` does not set up
+another set of cross-validation folds to find an optimal hyperparameter
+configuration for a learner. It instead tries to find the combination
+that contributes best to the ensemble being built. This treats hyperparameter
+optimization as a method to prevent exhaustively searching all learner
+combinations. This spares computational resources and performance evaluation
+is still honest if `outer_cv` is not `NA`.
 
-```{r grids, eval = FALSE}
-# Fill in still
+To define a grid, we use the function `specify_hyperparameters()`.
+It takes dots as its only argument, so we just pass the space of parameters
+we want to search with hyperparameter names. To do so, we have three
+functions available to us: `make_discrete()` takes discrete values
+as arguments, `make_range()` takes a minimum and maximum value for a continuous
+parameter, and `mixture()` takes multiple discrete or continuous
+spaces and mixes them with user-specified weights. We then pass
+the hyperparameter object into the `parameters` argument of a learner,
+rather than passing them directly as we did before.
+
+To demonstrate the capabilities of `enfold`, the last code block below
+shows two types of grids for xgboost: one simple discrete grid without
+a search engine (exhaustive search), and one grid with continuous parameters.
+In the latter case, we optimize over penalty parameters `alpha` and `lambda`,
+and use the `forbid()` method to ensure that only one of them can be larger
+than zero. We also specify that they are sampled from a log-uniform distribution
+mixed with a point mass at zero. We additionally set `n_snapshots` to 10
+at an `nrounds` of 200, which makes xgboost become a list learner with
+predictions output every 20 rounds without needing to re-train.
+
+```{r xgboost grids, eval = TRUE}
+# A simple search space
+grid_simple <- specify_hyperparameters(
+  max_depth = make_discrete(2, 4),
+  alpha = make_discrete(0, 1)
+)
+
+# A complex search space
+grid_complex <- specify_hyperparameters(
+  max_depth = make_discrete(2, 3, 4),
+  alpha = mixture(
+    make_discrete(0),
+    make_range(1e-5, 10, sample_space = sample_log_uniform()),
+    weights = c(0.5, 0.5)
+  ),
+  lambda = mixture(
+    make_discrete(0),
+    make_range(1e-5, 10, sample_space = sample_log_uniform()),
+    weights = c(0.5, 0.5)
+  )
+) |>
+  forbid(alpha > 0 && lambda > 0)
+
+# Training the simple grid and evaluating its performance
+simple_xgb <- lrn_xgboost("XGB Simple", parameters = grid_simple)
+
+simple_xgb_risk <- initialize_enfold(x = predictors, y = outcome) |>
+  add_learners(simple_xgb) |>
+  add_metalearners(mtl_selector("Select")) |>
+  add_cv_folds(inner_cv = 3L, outer_cv = 3L) |>
+  fit() |>
+  risk_learners(loss_fun = loss_gaussian(), type = "cv")
+
+# Training the complex grid and evaluating its performance
+complex_xgb <- lrn_xgboost(
+  "XGB Complex",
+  parameters = grid_complex,
+  nrounds = 200,
+  n_snapshots = 10
+)
+
+# This wraps around our xgboost with the complex hyperparameter specification.
+# make_score tells grd_early_stop() how to judge the performance of a list learner.
+# Choosing selector here means only the best given a parameter configuration counts.
+early_stop_complex_xgb <- grd_early_stop(
+  complex_xgb,
+  max_candidates = 30L,
+  score = make_score(loss_gaussian(), mtl_selector("S"))
+)
+
+complex_xgb_risk <- initialize_enfold(x = predictors, y = outcome) |>
+  add_learners(early_stop_complex_xgb) |>
+  add_metalearners(mtl_selector("Select")) |>
+  add_cv_folds(inner_cv = 3L, outer_cv = 3L) |>
+  fit() |>
+  risk_learners(loss_fun = loss_gaussian(), type = "cv")
+
+# Now for performance evaluation:
+# Simple grid:
+simple_xgb_risk
+setNames(
+  min(simple_xgb_risk),
+  names(which.min(simple_xgb_risk))
+)
+
+# The number of fit models is large, so we only show the risk of the best one
+# Number of learners trained (maximum is max_candidates * n_snapshots):
+length(complex_xgb_risk)
+
+# Best one:
+setNames(
+  min(complex_xgb_risk),
+  names(which.min(complex_xgb_risk))
+)
 ```
-
-Each hyperparameter combination is treated as a separate learner and
-handed to the metalearner together with the other base learners.
 
 ## Session info
 

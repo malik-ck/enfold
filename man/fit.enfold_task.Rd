@@ -36,6 +36,30 @@ the new metalearners only, then append to the existing ensembles.
 \item Nothing new → message and return unchanged.
 }
 }
+\details{
+\strong{Parallelism.} Set \code{future::plan()} before calling \code{fit()}.
+Three nesting levels are available:
+\enumerate{
+\item Outer folds (\code{build_ensembles} / \code{fit_ensemble})
+\item Learners within each outer fold
+\item Inner folds within each learner
+}
+Supply a nested plan to exploit multiple levels simultaneously:
+\preformatted{
+plan(list(
+  tweak(multisession, workers = 4),  # outer folds
+  tweak(multisession, workers = 3),  # learners
+  tweak(multisession, workers = 2)   # inner folds
+))
+}
+To parallelize outer and inner folds but keep learners sequential (useful
+when learner runtimes differ widely), insert \code{sequential} in the middle:
+\preformatted{
+plan(list(tweak(multisession, workers = 4), sequential, tweak(multisession, workers = 2)))
+}
+With \code{plan("sequential")} (the default), all three levels run sequentially
+at zero overhead.
+}
 \examples{
 x <- mtcars[, -1]; y <- mtcars$mpg
 task <- initialize_enfold(x, y) |>

@@ -81,7 +81,10 @@ predict.enfold_task_fitted <- function(
     if (!is.null(newdata)) {
       if (!is.null(dim(newdata)) && !is.null(dim(x))) {
         if (ncol(newdata) != ncol(x)) {
-          stop("ncol(newdata) must match ncol of the training data.", call. = FALSE)
+          stop(
+            "ncol(newdata) must match ncol of the training data.",
+            call. = FALSE
+          )
         }
       }
       x <- newdata
@@ -101,7 +104,7 @@ predict.enfold_task_fitted <- function(
         list(idx = val, preds = preds)
       })
 
-      all_idx  <- unlist(lapply(chunks, `[[`, "idx"))
+      all_idx <- unlist(lapply(chunks, `[[`, "idx"))
       combined <- combine_preds(lapply(chunks, `[[`, "preds"))
       sort_ord <- order(all_idx)
 
@@ -115,7 +118,9 @@ predict.enfold_task_fitted <- function(
     })
     names(result) <- use_names
 
-    if (length(result) == 1L) return(result[[1L]])
+    if (length(result) == 1L) {
+      return(result[[1L]])
+    }
     return(result)
   }
 
@@ -135,7 +140,9 @@ predict.enfold_task_fitted <- function(
   }
 
   fold_id <- if (object$is_cv_ensemble) ensemble_fold_id else 1L
-  if (is.null(newdata)) newdata <- object$x_env$x
+  if (is.null(newdata)) {
+    newdata <- object$x_env$x
+  }
 
   preds_list <- make_preds_list(object$fit_objects[[fold_id]], newdata)
 
@@ -144,7 +151,9 @@ predict.enfold_task_fitted <- function(
   })
   names(result) <- use_names
 
-  if (length(result) == 1L) return(result[[1L]])
+  if (length(result) == 1L) {
+    return(result[[1L]])
+  }
   result
 }
 
@@ -216,11 +225,11 @@ risk.enfold_task_fitted <- function(
   use_names <- resolve_metalearner_names(object, metalearner_name)
 
   get_preds <- suppressWarnings(stats::predict(
-    object           = object,
-    newdata          = newdata,
+    object = object,
+    newdata = newdata,
     metalearner_name = use_names,
     ensemble_fold_id = ensemble_fold_id,
-    type             = type
+    type = type
   ))
 
   # predict() simplifies to bare object when only one name; normalise to list
@@ -228,12 +237,16 @@ risk.enfold_task_fitted <- function(
     get_preds <- stats::setNames(list(get_preds), use_names[[1L]])
   }
 
-  vapply(names(get_preds), function(nm) {
-    preds <- get_preds[[nm]]
-    idx   <- attr(preds, "indices")
-    y_use <- if (!is.null(idx)) subset_y(y, idx) else y
-    mean(loss_fun$loss_fun(y_use, preds))
-  }, numeric(1L))
+  vapply(
+    names(get_preds),
+    function(nm) {
+      preds <- get_preds[[nm]]
+      idx <- attr(preds, "indices")
+      y_use <- if (!is.null(idx)) subset_y(y, idx) else y
+      mean(loss_fun$loss_fun(y_use, preds))
+    },
+    numeric(1L)
+  )
 }
 
 
@@ -285,18 +298,18 @@ fold_risk <- function(object, loss_fun, metalearner_name = NULL, ...) {
       call. = FALSE
     )
   }
-  loss_fun  <- validate_loss_fun(loss_fun)
+  loss_fun <- validate_loss_fun(loss_fun)
   use_names <- resolve_metalearner_names(object, metalearner_name)
 
-  x          <- object$x_env$x
-  y          <- object$y_env$y
+  x <- object$x_env$x
+  y <- object$y_env$y
   perf_folds <- object$cv$performance_sets
-  n_folds    <- length(perf_folds)
+  n_folds <- length(perf_folds)
 
   out <- matrix(
     NA_real_,
-    nrow     = n_folds,
-    ncol     = length(use_names),
+    nrow = n_folds,
+    ncol = length(use_names),
     dimnames = list(
       paste0("fold_", seq_len(n_folds)),
       use_names
@@ -304,12 +317,15 @@ fold_risk <- function(object, loss_fun, metalearner_name = NULL, ...) {
   )
 
   for (i in seq_len(n_folds)) {
-    val       <- validation_set(perf_folds[[i]])
-    preds_lst <- make_preds_list(object$fit_objects[[i]], x[val, , drop = FALSE])
-    y_fold    <- subset_y(y, val)
+    val <- validation_set(perf_folds[[i]])
+    preds_lst <- make_preds_list(
+      object$fit_objects[[i]],
+      x[val, , drop = FALSE]
+    )
+    y_fold <- subset_y(y, val)
     for (nm in use_names) {
-      preds        <- apply_metalearner(object$ensembles[[i]], nm, preds_lst)
-      out[i, nm]   <- mean(loss_fun$loss_fun(y_fold, preds))
+      preds <- apply_metalearner(object$ensembles[[i]], nm, preds_lst)
+      out[i, nm] <- mean(loss_fun$loss_fun(y_fold, preds))
     }
   }
 
@@ -378,10 +394,10 @@ loss <- function(object, ...) UseMethod("loss")
 loss.enfold_task_fitted <- function(
   object,
   loss_fun,
-  newdata          = NULL,
+  newdata = NULL,
   metalearner_name = NULL,
   ensemble_fold_id = NULL,
-  type             = NULL,
+  type = NULL,
   ...
 ) {
   if (is.null(type)) {
@@ -391,17 +407,17 @@ loss.enfold_task_fitted <- function(
       call. = FALSE
     )
   }
-  type      <- match.arg(type, c("cv", "ensemble"))
-  loss_fun  <- validate_loss_fun(loss_fun)
+  type <- match.arg(type, c("cv", "ensemble"))
+  loss_fun <- validate_loss_fun(loss_fun)
   use_names <- resolve_metalearner_names(object, metalearner_name)
-  y         <- object$y_env$y
+  y <- object$y_env$y
 
   preds_all <- suppressWarnings(stats::predict(
-    object           = object,
-    newdata          = newdata,
+    object = object,
+    newdata = newdata,
     metalearner_name = use_names,
     ensemble_fold_id = ensemble_fold_id,
-    type             = type
+    type = type
   ))
 
   # Normalise to named list
@@ -410,17 +426,17 @@ loss.enfold_task_fitted <- function(
   }
 
   first_preds <- preds_all[[1L]]
-  idx_vec     <- attr(first_preds, "indices")
+  idx_vec <- attr(first_preds, "indices")
 
   out <- data.frame(
-    .index           = if (!is.null(idx_vec)) idx_vec else seq_len(NROW(first_preds)),
+    .index = if (!is.null(idx_vec)) idx_vec else seq_len(NROW(first_preds)),
     stringsAsFactors = FALSE
   )
 
   for (nm in use_names) {
-    preds     <- preds_all[[nm]]
-    idx       <- attr(preds, "indices")
-    y_use     <- if (!is.null(idx)) subset_y(y, idx) else y
+    preds <- preds_all[[nm]]
+    idx <- attr(preds, "indices")
+    y_use <- if (!is.null(idx)) subset_y(y, idx) else y
     out[[nm]] <- loss_fun$loss_fun(y_use, preds)
   }
 
@@ -468,7 +484,7 @@ loss.enfold_task_fitted <- function(
 predict_learners <- function(
   object,
   newdata = NULL,
-  type    = c("cv", "ensemble"),
+  type = c("cv", "ensemble"),
   fold_id = NULL,
   ...
 ) {
@@ -489,7 +505,9 @@ predict_learners <- function(
       )
     }
     fold_id <- if (object$is_cv_ensemble) fold_id else 1L
-    if (is.null(newdata)) newdata <- object$x_env$x
+    if (is.null(newdata)) {
+      newdata <- object$x_env$x
+    }
     return(make_preds_list(object$fit_objects[[fold_id]], newdata))
   }
 
@@ -542,26 +560,34 @@ predict_learners <- function(
 risk_learners <- function(
   object,
   loss_fun,
-  type    = c("cv", "ensemble"),
+  type = c("cv", "ensemble"),
   fold_id = NULL,
   ...
 ) {
   if (!inherits(object, "enfold_task_fitted")) {
     stop("`object` must be an enfold_task_fitted.", call. = FALSE)
   }
-  type     <- match.arg(type)
+  type <- match.arg(type)
   loss_fun <- validate_loss_fun(loss_fun)
-  y        <- object$y_env$y
+  y <- object$y_env$y
 
-  preds <- predict_learners(object, newdata = NULL, type = type,
-                            fold_id = fold_id)
+  preds <- predict_learners(
+    object,
+    newdata = NULL,
+    type = type,
+    fold_id = fold_id
+  )
 
-  vapply(names(preds), function(nm) {
-    p     <- preds[[nm]]
-    idx   <- attr(p, "indices")
-    y_use <- if (!is.null(idx)) subset_y(y, idx) else y
-    mean(loss_fun$loss_fun(y_use, p))
-  }, numeric(1L))
+  vapply(
+    names(preds),
+    function(nm) {
+      p <- preds[[nm]]
+      idx <- attr(p, "indices")
+      y_use <- if (!is.null(idx)) subset_y(y, idx) else y
+      mean(loss_fun$loss_fun(y_use, p))
+    },
+    numeric(1L)
+  )
 }
 
 
@@ -605,31 +631,36 @@ risk_learners <- function(
 loss_learners <- function(
   object,
   loss_fun,
-  type    = c("cv", "ensemble"),
+  type = c("cv", "ensemble"),
   fold_id = NULL,
   ...
 ) {
   if (!inherits(object, "enfold_task_fitted")) {
     stop("`object` must be an enfold_task_fitted.", call. = FALSE)
   }
-  type     <- match.arg(type)
+  type <- match.arg(type)
   loss_fun <- validate_loss_fun(loss_fun)
-  y        <- object$y_env$y
+  y <- object$y_env$y
 
-  preds <- predict_learners(object, newdata = NULL, type = type, fold_id = fold_id)
+  preds <- predict_learners(
+    object,
+    newdata = NULL,
+    type = type,
+    fold_id = fold_id
+  )
 
-  first   <- preds[[1L]]
+  first <- preds[[1L]]
   idx_vec <- attr(first, "indices")
 
   out <- data.frame(
-    .index           = if (!is.null(idx_vec)) idx_vec else seq_len(NROW(first)),
+    .index = if (!is.null(idx_vec)) idx_vec else seq_len(NROW(first)),
     stringsAsFactors = FALSE
   )
 
   for (nm in names(preds)) {
-    p         <- preds[[nm]]
-    idx       <- attr(p, "indices")
-    y_use     <- if (!is.null(idx)) subset_y(y, idx) else y
+    p <- preds[[nm]]
+    idx <- attr(p, "indices")
+    y_use <- if (!is.null(idx)) subset_y(y, idx) else y
     out[[nm]] <- loss_fun$loss_fun(y_use, p)
   }
 
@@ -680,7 +711,7 @@ print.enfold_task_fitted <- function(x, ...) {
 # Apply one named metalearner from a fold's ensemble list to a preds_list
 apply_metalearner <- function(ensembles_fold, mtl_name, preds_list) {
   mtl_names <- get_learner_names(ensembles_fold)
-  mtl_pos   <- which(mtl_names == mtl_name)
+  mtl_pos <- which(mtl_names == mtl_name)
   if (length(mtl_pos) == 0L) {
     stop(sprintf(
       "Metalearner '%s' not found in this fold's ensembles.\nAvailable: %s",
@@ -726,7 +757,9 @@ make_preds_list <- function(fit_objects_fold, newdata) {
         NULL
       }
     )
-    if (is.null(raw)) next
+    if (is.null(raw)) {
+      next
+    }
 
     # Splice pipeline/grid outputs as independent entries
     if (
@@ -737,7 +770,8 @@ make_preds_list <- function(fit_objects_fold, newdata) {
       for (nm in names(raw)) {
         if (inherits(raw[[nm]], "enfold_pipeline_path_error")) {
           warning(sprintf(
-            "Pipeline path '%s' errored during prediction and is skipped.", nm
+            "Pipeline path '%s' errored during prediction and is skipped.",
+            nm
           ))
           next
         }
@@ -764,16 +798,16 @@ make_preds_list <- function(fit_objects_fold, newdata) {
 
 # Compute out-of-fold learner predictions over outer performance folds
 cv_learner_preds <- function(object) {
-  x          <- object$x_env$x
+  x <- object$x_env$x
   perf_folds <- object$cv$performance_sets
-  n_folds    <- length(perf_folds)
+  n_folds <- length(perf_folds)
 
   # Collect per-fold chunks: list indexed by learner name, each element a list
   # of (idx, preds) chunks across folds
   chunks_by_learner <- list()
 
   for (i in seq_len(n_folds)) {
-    val   <- validation_set(perf_folds[[i]])
+    val <- validation_set(perf_folds[[i]])
     chunk <- make_preds_list(object$fit_objects[[i]], x[val, , drop = FALSE])
     for (nm in names(chunk)) {
       if (is.null(chunks_by_learner[[nm]])) {
@@ -788,7 +822,7 @@ cv_learner_preds <- function(object) {
 
   # Combine chunks for each learner, sort by index
   lapply(chunks_by_learner, function(fold_chunks) {
-    all_idx  <- unlist(lapply(fold_chunks, `[[`, "idx"))
+    all_idx <- unlist(lapply(fold_chunks, `[[`, "idx"))
     combined <- combine_preds(lapply(fold_chunks, `[[`, "preds"))
     sort_ord <- order(all_idx)
 

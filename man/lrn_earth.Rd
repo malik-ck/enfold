@@ -13,7 +13,8 @@ lrn_earth(
   nk = 100,
   thresh = 0.01,
   pmethod = "backward",
-  nfold = 0
+  nfold = 0,
+  parameters = NULL
 )
 }
 \arguments{
@@ -40,6 +41,11 @@ as an offset.}
 
 \item{nfold}{Integer. Number of cross-validation folds internal to
 \code{earth} (\code{0} disables internal CV). Default \code{0}.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

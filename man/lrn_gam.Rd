@@ -12,7 +12,8 @@ lrn_gam(
   frm = NULL,
   smoother = "tp",
   fast = TRUE,
-  method = NULL
+  method = NULL,
+  parameters = NULL
 )
 }
 \arguments{
@@ -38,6 +39,11 @@ Default \code{"tp"} (thin plate regression splines).}
 \item{method}{Character or \code{NULL}. Smoothing parameter estimation
 method. Ignored when \code{fast = TRUE} (which always uses
 \code{"fREML"}).}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

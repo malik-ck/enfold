@@ -105,18 +105,11 @@ test_that("branching pipeline fits and predicts inside a full task", {
 ## ============================================================================
 
 test_that("grid wrapping pipeline produces paths prefixed with screener name", {
-  scr <- scr_correlation("Scr", cutoff = 0.05)
-  rf_lrn <- lrn_ranger("RF")
-  pl <- make_pipeline(scr, rf_lrn)
-  params <- specify_hyperparameters(num.trees = c(50L, 100L))
-  g <- grd_random(
-    "RF",
-    pl,
-    params,
-    directory = "RF",
-    n_candidates = 2L,
-    seed = 1L
-  )
+  scr     <- scr_correlation("Scr", cutoff = 0.05)
+  params  <- specify_hyperparameters(num.trees = make_discrete(50L, 100L))
+  rf_bare <- lrn_ranger("RF", parameters = params)
+  pl      <- make_pipeline(scr, rf_bare)
+  g       <- grd_random(pl, n_candidates = 2L, seed = 1L)
 
   folds <- new_fold_list(list(new_fold(validation_set = 101:200, n = n)))
   res <- cv_fit(g, folds, x, y)
@@ -127,18 +120,11 @@ test_that("grid wrapping pipeline produces paths prefixed with screener name", {
 })
 
 test_that("grid wrapping pipeline fits end-to-end inside a full task", {
-  scr <- scr_correlation("Scr", cutoff = 0.05)
-  rf_lrn <- lrn_ranger("RF")
-  pl <- make_pipeline(scr, rf_lrn)
-  params <- specify_hyperparameters(num.trees = c(50L, 100L))
-  g <- grd_random(
-    "RF",
-    pl,
-    params,
-    directory = "RF",
-    n_candidates = 2L,
-    seed = 1L
-  )
+  scr     <- scr_correlation("Scr", cutoff = 0.05)
+  params  <- specify_hyperparameters(num.trees = make_discrete(50L, 100L))
+  rf_bare <- lrn_ranger("RF", parameters = params)
+  pl      <- make_pipeline(scr, rf_bare)
+  g       <- grd_random(pl, n_candidates = 2L, seed = 1L)
 
   task <- initialize_enfold(x, y) |>
     add_learners(lrn_mean("Mean"), g) |>

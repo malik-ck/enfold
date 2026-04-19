@@ -22,6 +22,10 @@
 #' }
 #'
 #' @param name Character. Name for this learner instance.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @export
 lrn_mean <- make_learner_factory(
@@ -40,6 +44,10 @@ lrn_mean <- make_learner_factory(
 #'   from \code{y}.
 #' @param offset Character or \code{NULL}. Name of a column in \code{x} to
 #'   use as an offset.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{lrn_gam}}, \code{\link{lrn_glmnet}},
 #'   \code{\link{make_learner_factory}}
@@ -48,7 +56,7 @@ lrn_mean <- make_learner_factory(
 #' fitted <- fit(lrn, x = mtcars[, -1], y = mtcars$mpg)
 #' head(predict(fitted, newdata = mtcars[, -1]))
 #' @export
-lrn_glm <- function(name, family, offset = NULL) {
+lrn_glm <- function(name, family, offset = NULL, parameters = NULL) {
   if (missing(family)) {
     stop(
       "Argument 'family' is missing. You need to specify a family object ",
@@ -116,7 +124,7 @@ lrn_glm <- function(name, family, offset = NULL) {
       },
       family,
       offset = NULL
-    )(name = name, family = family, offset = offset)
+    )(name = name, family = family, offset = offset, parameters = parameters)
   )
 }
 
@@ -143,6 +151,10 @@ lrn_glm <- function(name, family, offset = NULL) {
 #' @param method Character or \code{NULL}. Smoothing parameter estimation
 #'   method. Ignored when \code{fast = TRUE} (which always uses
 #'   \code{"fREML"}).
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{lrn_glm}}, \code{\link{lrn_mboost}}
 #' @examples
@@ -160,7 +172,8 @@ lrn_gam <- function(
   frm = NULL,
   smoother = "tp",
   fast = TRUE,
-  method = NULL
+  method = NULL,
+  parameters = NULL
 ) {
   .msg_pkg("mgcv")
 
@@ -313,7 +326,8 @@ lrn_gam <- function(
     offset = offset,
     k = k,
     frm = frm,
-    smoother = smoother
+    smoother = smoother,
+    parameters = parameters
   )
 }
 
@@ -341,6 +355,10 @@ lrn_gam <- function(
 #'   learners. Default \code{20}.
 #' @param df_factor Numeric in \eqn{(0, 1]}. Scales the degrees of freedom
 #'   relative to the number of unique values. Default \code{0.99}.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{lrn_gam}}, \code{\link{lrn_glm}}
 #' @examples
@@ -359,7 +377,8 @@ lrn_mboost <- function(
   frm = NULL,
   max_df = 5,
   knots = 20,
-  df_factor = 0.99
+  df_factor = 0.99,
+  parameters = NULL
 ) {
   .msg_pkg("mboost")
 
@@ -511,7 +530,8 @@ lrn_mboost <- function(
     frm = frm,
     max_df = max_df,
     knots = knots,
-    df_factor = df_factor
+    df_factor = df_factor,
+    parameters = parameters
   )
 }
 
@@ -534,6 +554,10 @@ lrn_mboost <- function(
 #'   Default \code{1}.
 #' @param num_knots Integer. Number of knots per basis function. Default
 #'   \code{50}.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_list} object. Fitting it
 #' creates 100 learners, one for each value of \eqn{\lambda} in the regularization path.
 #' @seealso \code{\link{lrn_glmnet}}, \code{\link{lrn_glm}}
@@ -551,7 +575,8 @@ lrn_hal <- function(
   frm = NULL,
   max_degree = 2,
   smoothness_orders = 1,
-  num_knots = 50
+  num_knots = 50,
+  parameters = NULL
 ) {
   .msg_pkg("hal9001")
 
@@ -709,7 +734,8 @@ lrn_hal <- function(
     frm = frm,
     max_degree = max_degree,
     smoothness_orders = smoothness_orders,
-    num_knots = num_knots
+    num_knots = num_knots,
+    parameters = parameters
   )
 }
 
@@ -735,6 +761,10 @@ lrn_hal <- function(
 #'   path, or an \code{enfold_lambda_request} produced by
 #'   \code{\link{make_lambda_sequence}}. Using \code{make_lambda_sequence}
 #'   ensures the same lambda grid is used across all cross-validation folds.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_list} learner (a subclass of
 #'   \code{enfold_learner}) whose \code{predict()} method returns a named
 #'   list with one entry per \eqn{\lambda}.
@@ -756,7 +786,8 @@ lrn_glmnet <- function(
   offset = NULL,
   frm = NULL,
   alpha = 1,
-  lambda
+  lambda,
+  parameters = NULL
 ) {
   .msg_pkg("glmnet")
 
@@ -826,7 +857,7 @@ lrn_glmnet <- function(
       )
       do.call(glmnet::glmnet.control, old_controls)
 
-      # Strip call; expensive to store
+      # Strip call, expensive to store
       get_model[["call"]] <- NULL
       return(list(
         model = get_model,
@@ -887,7 +918,8 @@ lrn_glmnet <- function(
     offset = offset,
     frm = frm,
     alpha = alpha,
-    lambda = lambda
+    lambda = lambda,
+    parameters = parameters
   )
 }
 
@@ -912,6 +944,10 @@ lrn_glmnet <- function(
 #'   \code{"backward"}.
 #' @param nfold Integer. Number of cross-validation folds internal to
 #'   \code{earth} (\code{0} disables internal CV). Default \code{0}.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{lrn_gam}}, \code{\link{lrn_glm}}
 #' @examples
@@ -930,7 +966,8 @@ lrn_earth <- function(
   nk = 100,
   thresh = 0.01,
   pmethod = "backward",
-  nfold = 0
+  nfold = 0,
+  parameters = NULL
 ) {
   .msg_pkg("earth")
 
@@ -1038,7 +1075,8 @@ lrn_earth <- function(
     nk = nk,
     thresh = thresh,
     pmethod = pmethod,
-    nfold = nfold
+    nfold = nfold,
+    parameters = parameters
   )
 }
 
@@ -1056,6 +1094,10 @@ lrn_earth <- function(
 #'   as an offset.
 #' @param frm Formula or \code{NULL}. Passed to \code{model.matrix()} for
 #'   custom basis expansion.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{lrn_glm}}, \code{\link{lrn_glmnet}}
 #' @examples
@@ -1065,7 +1107,7 @@ lrn_earth <- function(
 #' head(predict(fitted, newdata = as.matrix(mtcars[, -1])))
 #' }
 #' @export
-lrn_bigGlm <- function(name, family, offset = NULL, frm = NULL) {
+lrn_bigGlm <- function(name, family, offset = NULL, frm = NULL, parameters = NULL) {
   .msg_pkg("glmnet")
 
   if (missing(family)) {
@@ -1189,7 +1231,7 @@ lrn_bigGlm <- function(name, family, offset = NULL, frm = NULL) {
     family,
     offset = NULL,
     frm = NULL
-  )(name = name, family = family, offset = offset, frm = frm)
+  )(name = name, family = family, offset = offset, frm = frm, parameters = parameters)
 }
 
 
@@ -1212,6 +1254,10 @@ lrn_bigGlm <- function(name, family, offset = NULL, frm = NULL) {
 #' @param max.depth Integer or \code{NULL}. Maximum tree depth.
 #' @param splitrule Character or \code{NULL}. Splitting rule passed to
 #'   \code{ranger}.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{lrn_gam}}, \code{\link{grd_random}}
 #' @examples
@@ -1230,7 +1276,8 @@ lrn_ranger <- function(
   min.node.size = NULL,
   min.bucket = NULL,
   max.depth = NULL,
-  splitrule = NULL
+  splitrule = NULL,
+  parameters = NULL
 ) {
   return(
     make_learner_factory(
@@ -1302,7 +1349,8 @@ lrn_ranger <- function(
       min.node.size = min.node.size,
       min.bucket = min.bucket,
       max.depth = max.depth,
-      splitrule = splitrule
+      splitrule = splitrule,
+      parameters = parameters
     )
   )
 }
@@ -1332,6 +1380,10 @@ lrn_ranger <- function(
 #' @param lambda Numeric. L2 regularisation weight on leaf weights.
 #' @param alpha Numeric. L1 regularisation weight on leaf weights. Default \code{0}.
 #' @param min_child_weight Numeric. Minimum sum of instance weight in a leaf.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_list} whose \code{predict()} method returns a named
 #'   list with one numeric vector per snapshot round.
 #' @seealso \code{\link{lrn_ranger}}, \code{\link{lrn_glmnet}}
@@ -1355,12 +1407,14 @@ lrn_xgboost <- function(
   verbose = 0L,
   lambda = 2,
   alpha = 0,
-  min_child_weight = 5
+  min_child_weight = 5,
+  parameters = NULL
 ) {
   integer_checker(nrounds, "nrounds")
   integer_checker(n_snapshots, "n_snapshots")
 
-  is_enfold_list <- if (!is.null(n_snapshots)) TRUE else FALSE
+  is_enfold_list <- !is.null(n_snapshots) ||
+    (!is.null(parameters) && "n_snapshots" %in% names(parameters))
 
   # expect_list is TRUE only if n_snapshots > 1
   if (!is.null(n_snapshots)) {
@@ -1481,7 +1535,8 @@ lrn_xgboost <- function(
     verbose = verbose,
     lambda = lambda,
     alpha = alpha,
-    min_child_weight = min_child_weight
+    min_child_weight = min_child_weight,
+    parameters = parameters
   )
 }
 

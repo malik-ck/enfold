@@ -31,7 +31,7 @@ No class inherits from another except where methods are genuinely shared. `enfol
 | `enfold_pipeline` / `enfold_pipeline_fitted` | `make_pipeline(...)` / `fit()` | DAG of stages; branching via multiple nodes per stage |
 | `enfold_grid` | `make_grid_factory()(...)` | Search engine baked into closure |
 | `enfold_list` | `make_learner_factory(..., expect_list=TRUE)(...)` | Thin wrapper indicating predict returns a named list |
-| `enfold_hyperparameters` | `specify_hyperparameters(...)` | Discrete values or `make_range()`; supports `forbid()` and `log_transform()` |
+| `enfold_hyperparameters` | `specify_hyperparameters(...)` | Discrete values or `make_range()`; supports `forbid()`; log-scale via `sample_log_uniform()` |
 
 ## Workflow
 ```

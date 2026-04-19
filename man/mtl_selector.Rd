@@ -4,13 +4,18 @@
 \alias{mtl_selector}
 \title{Discrete model selector metalearner}
 \usage{
-mtl_selector(name, loss_fun = loss_gaussian())
+mtl_selector(name, loss_fun = loss_gaussian(), parameters = NULL)
 }
 \arguments{
 \item{name}{Character. Name of the metalearner.}
 
 \item{loss_fun}{An \code{mtl_loss} object (default \code{loss_gaussian()}).
 Loss is computed per learner over the full inner-fold predictions.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.

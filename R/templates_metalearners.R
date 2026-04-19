@@ -25,10 +25,14 @@
 #' @param name Character. Name of the metalearner.
 #' @param loss_fun An \code{mtl_loss} object (default \code{loss_gaussian()}).
 #'   Loss is computed per learner over the full inner-fold predictions.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{mtl_superlearner}}, \code{\link{loss_gaussian}}
 #' @export
-mtl_selector <- function(name, loss_fun = loss_gaussian()) {
+mtl_selector <- function(name, loss_fun = loss_gaussian(), parameters = NULL) {
   make_learner_factory(
     fit = function(x, y) {
       all_losses <- vapply(
@@ -51,7 +55,7 @@ mtl_selector <- function(name, loss_fun = loss_gaussian()) {
       to_return
     },
     loss_fun = loss_gaussian()
-  )(name = name, loss_fun = loss_fun)
+  )(name = name, loss_fun = loss_fun, parameters = parameters)
 }
 
 
@@ -69,6 +73,10 @@ mtl_selector <- function(name, loss_fun = loss_gaussian()) {
 #'   Default \code{1000}.
 #' @param tol Numeric. Convergence tolerance (Frank-Wolfe gap). Default
 #'   \code{1e-7}.
+#' @param parameters An \code{enfold_hyperparameters} object from
+#'   \code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+#'   provided, returns a bare \code{enfold_grid} ready to wrap with a
+#'   \code{grd_*()} constructor.
 #' @return An \code{enfold_learner} object.
 #' @seealso \code{\link{mtl_selector}}, \code{\link{loss_gaussian}}
 #' @examples
@@ -85,7 +93,8 @@ mtl_superlearner <- function(
   name,
   loss_fun = loss_gaussian(),
   max_iter = 1000,
-  tol = 1e-7
+  tol = 1e-7,
+  parameters = NULL
 ) {
   make_learner_factory(
     fit = function(x, y) {
@@ -145,11 +154,11 @@ mtl_superlearner <- function(
     loss_fun = loss_gaussian(),
     max_iter = 1000,
     tol = 1e-7
-  )(name = name, loss_fun = loss_fun, max_iter = max_iter, tol = tol)
+  )(name = name, loss_fun = loss_fun, max_iter = max_iter, tol = tol, parameters = parameters)
 }
 
 
-mtl_nnls <- function(name, normalize = FALSE) {
+mtl_nnls <- function(name, normalize = FALSE, parameters = NULL) {
   make_learner_factory(
     fit = function(x, y) {
       if (is.matrix(y)) {
@@ -178,7 +187,7 @@ mtl_nnls <- function(name, normalize = FALSE) {
       return(as.vector(preds_mat %*% object))
     },
     normalize = FALSE
-  )(name = name, normalize = normalize)
+  )(name = name, normalize = normalize, parameters = parameters)
 }
 
 

@@ -4,28 +4,14 @@
 \alias{grd_bayes}
 \title{Bayesian hyperparameter search grid constructor}
 \usage{
-grd_bayes(
-  name_prefix,
-  learner_object,
-  parameters,
-  directory = NULL,
-  n_init = 5L,
-  n_iter = 10L,
-  score,
-  seed = NULL
-)
+grd_bayes(grid, n_init = 5L, n_iter = 10L, score, seed = NULL)
 }
 \arguments{
-\item{name_prefix}{Character. Prefix for generated learner names.}
-
-\item{learner_object}{An \code{enfold_learner}, \code{enfold_pipeline}, or
-\code{enfold_list} instance to search over.}
-
-\item{parameters}{An \code{enfold_hyperparameters} object. All parameters
+\item{grid}{A bare \code{enfold_grid} (created via
+\code{lrn_*(name, parameters = ...)}) or an \code{enfold_pipeline}
+containing exactly one embedded bare grid node. Name, learner, and
+hyperparameter specification are derived automatically. All parameters
 must be continuous \code{enfold_range} objects.}
-
-\item{directory}{\code{NULL} for a plain learner, or a character vector
-naming the target node inside a pipeline.}
 
 \item{n_init}{Integer. Number of random initial evaluations before
 Bayesian updating begins. Default \code{5L}.}
@@ -56,15 +42,19 @@ objects via \code{\link{make_range}}.
 }
 \examples{
 \dontrun{
-params <- specify_hyperparameters(lambda = make_range(1e-4, 10))
-grid   <- grd_bayes(
-  "en", lrn_glmnet("en", gaussian()), params,
+grid <- grd_bayes(
+  lrn_glmnet("en", gaussian(), parameters = specify_hyperparameters(
+    lambda = make_range(1e-4, 10)
+  )),
   score = make_score(loss_gaussian())
 )
 
 # Multi-output pipeline: supply a metalearner
+rf_bare <- lrn_ranger("rf", parameters = specify_hyperparameters(
+  num.trees = make_range(50, 500)
+))
 grid <- grd_bayes(
-  "pipe", my_pipeline, params,
+  make_pipeline(my_screener, rf_bare),
   score = make_score(loss_gaussian(), metalearner = mtl_selector("sel"))
 )
 }

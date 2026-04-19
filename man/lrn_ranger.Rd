@@ -13,7 +13,8 @@ lrn_ranger(
   min.node.size = NULL,
   min.bucket = NULL,
   max.depth = NULL,
-  splitrule = NULL
+  splitrule = NULL,
+  parameters = NULL
 )
 }
 \arguments{
@@ -39,6 +40,11 @@ node observations).}
 
 \item{splitrule}{Character or \code{NULL}. Splitting rule passed to
 \code{ranger}.}
+
+\item{parameters}{An \code{enfold_hyperparameters} object from
+\code{\link{specify_hyperparameters}()}, or \code{NULL} (default). When
+provided, returns a bare \code{enfold_grid} ready to wrap with a
+\code{grd_*()} constructor.}
 }
 \value{
 An \code{enfold_learner} object.
