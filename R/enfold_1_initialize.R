@@ -77,3 +77,36 @@ initialize_enfold <- function(x, y) {
     class = "enfold_task"
   )
 }
+
+# Add print method
+
+#' @export
+print.enfold_task <- function(x, ...) {
+
+  cat("Enfold Task\n\n")
+  cat("Data:\n")
+  cat(sprintf("  Observations : %d\n", nrow(x$x_env$x)))
+  cat(sprintf("  Predictors   : %d\n", ncol(x$x_env$x)))
+  cat("\n")
+  cv_word <- if (is.null(x$cv)) {
+    cat("CV specified   : No\n")
+  } else {
+    cat("CV specified   : Yes\n")
+  }
+
+  learner_word <- if (is.null(x$learners)) {
+    cat("Learners       : None\n")
+  } else {
+    cat(sprintf("  Learners       : %d\n", length(x$learners)))
+  }
+
+  metalarner_word <- if (is.null(x$metalearners)) {
+    cat("Metalearners   : None\n")
+  } else {
+    cat(sprintf("  Metalearners   : %d\n", length(x$metalearners)))
+  }
+  cat("\n")
+  cat("Not yet fitted.")
+
+  invisible(x)
+}

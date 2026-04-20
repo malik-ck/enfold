@@ -4,13 +4,25 @@
 # enfold
 
 <!-- badges: start -->
+
 <!-- badges: end -->
 
-The goal of enfold is to …
+`enfold` is a model ensembling toolbox that makes nested
+cross-validation convenient and accessible. Applicable to all supervised
+learning problems, but designed with nuisance model estimation for
+causal inference in mind. Supports many types of advanced learner
+objects found in modern machine learning ecosystems, such as pipelines
+and hyperparameter optimizers. There are three distinctive features of
+`enfold`:
+
+- List learners, which train one learner and output a list of valid
+  predictions (e.g., fitting an entire elastic net regularization path)
+- Predictions from cross-validated ensembles as first-class feature
+- Very simple learner creation via built-in factory makers
 
 ## Installation
 
-You can install the development version of enfold from
+You can install the development version of `enfold` from
 [GitHub](https://github.com/) with:
 
 ``` r
@@ -20,33 +32,161 @@ pak::pak("malik-ck/enfold")
 
 ## Example
 
-This is a basic example which shows you how to solve a common problem:
+We use the built-in `enfold_demo` data set to predict HbA1c. Suppose we
+wanted to compare HbA1c among those in our study that had coronary heart
+disease to those who did not. We use a simple mean learner, a random
+forest, and a generalized linear model (GLM). For illustration, we
+create a GLM template in the code block below, though `enfold` of course
+ships one as `lrn_glmnet()`.
 
 ``` r
+set.seed(7441)
 library(enfold)
-## basic example code
+data(enfold_demo, package = "enfold")
+
+predictors <- enfold_demo[, setdiff(names(enfold_demo), "hba1c")]
+outcome <- enfold_demo$hba1c
+
+# Create a GLM template
+# fit always needs to be a function of x and y, even if we use more arguments.
+# preds always needs to be a function of object and data.
+# Additional required arguments are passed as named arguments to make_learner_factory.
+# Here, we add "family" without value, which makes the family argument of our learner
+# have no default.
+my_glm_maker <- make_learner_factory(
+  fit = function(x, y) glm(y ~ ., data = data.frame(y = y, x), family = family),
+  preds = function(object, data) {
+    predict(object, newdata = data, type = "response")
+  },
+  family
+)
+
+# Now instantiate a learner
+# The first argument is 'name', added by the learner factory maker, and required
+my_glm <- my_glm_maker(name = "My GLM", family = gaussian())
+
+# Other learners to add: mean learner, random forest
+mean_learner <- lrn_mean("Mean")
+ranger_learner <- lrn_ranger("Random Forest", num.trees = 300)
+
+# Build superlearner ensembles via three-fold cross-validation.
+# Do this in an outer three-fold cross-validation loop
+# to get pure out-of-fold predictions.
+superlearner_ensembles <- initialize_enfold(predictors, outcome) |>
+  add_learners(my_glm, mean_learner, ranger_learner) |>
+  add_metalearners(mtl_superlearner("SL")) |>
+  add_cv_folds(inner_cv = 3L, outer_cv = 3L) |>
+  fit()
+#> Warning: package 'future' was built under R version 4.5.3
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`?
-You can include R chunks like so:
+We have a number of functions available to evaluate fit ensembles.
+Below, we use `risk()` to assess mean loss for our superlearner as well
+as individual learners via `risk_learners()`. Passing `type = "cv"`
+calculates risk exclusively on out-of-fold data using the fold
+specification added by `add_cv_folds`.
 
 ``` r
-summary(cars)
-#>      speed           dist       
-#>  Min.   : 4.0   Min.   :  2.00  
-#>  1st Qu.:12.0   1st Qu.: 26.00  
-#>  Median :15.0   Median : 36.00  
-#>  Mean   :15.4   Mean   : 42.98  
-#>  3rd Qu.:19.0   3rd Qu.: 56.00  
-#>  Max.   :25.0   Max.   :120.00
+risk(superlearner_ensembles, type = "cv", loss_fun = loss_gaussian())
+#>        SL 
+#> 0.1850677
+
+risk_learners(
+  superlearner_ensembles,
+  type = "cv",
+  loss_fun = loss_gaussian()
+)
+#>        My GLM          Mean Random Forest 
+#>     0.2095792     0.4487277     0.1858747
 ```
 
-You’ll still need to render `README.Rmd` regularly, to keep `README.md`
-up-to-date. `devtools::build_readme()` is handy for this.
+We now want to predict HbA1c, setting coronary heart disease to `1` or
+`0` throughout our sample. This does not estimate a causal quantity in
+this case, but helps us assess whether we expect people with coronary
+heart disease to have a different HbA1c, averaged over the covariate
+distribution in our study. Note that the data in `enfold_demo` is
+simulated and does not provide clinical insight. The predictions we
+generate here are cross-validated. We take the mean of predictions to
+summarize our results.
 
-You can also embed plots, for example:
+``` r
+# Setting to no CHD
+data_no_chd <- predictors
+data_no_chd$coronary_heart_disease <- 0
 
-<img src="man/figures/README-pressure-1.png" width="100%" />
+# Setting to all CHD
+data_all_chd <- predictors
+data_all_chd$coronary_heart_disease <- 1
 
-In that case, don’t forget to commit and push the resulting figure
-files, so they display on GitHub and CRAN.
+# Predicting
+no_chd_preds <- predict(
+  superlearner_ensembles,
+  newdata = data_no_chd,
+  type = "cv"
+)
+all_chd_preds <- predict(
+  superlearner_ensembles,
+  newdata = data_all_chd,
+  type = "cv"
+)
+
+# Looking at the results...
+
+# Mean among no CHD:
+mean(no_chd_preds)
+#> [1] 5.522485
+
+# Mean among all CHD:
+mean(all_chd_preds)
+#> [1] 6.098061
+
+# Mean difference 1 - 0:
+mean(all_chd_preds) - mean(no_chd_preds)
+#> [1] 0.5755761
+```
+
+If we wanted non-cross-validated predictions (typical for, say, model
+deployment), we would set `outer_cv = NA` and change `type` to
+`ensemble`.
+
+Check the package vignettes for advanced functionality, such as
+pipelines and grids.
+
+## List learner illustration
+
+To show list learner functionality, we use `enfold` below to fit one
+elastic net learner without a metalearner. When calling `risk_learners`,
+we can see that `enfold` treats the elastic net as one learner per
+lambda.
+
+``` r
+# Slight quirk: Need to pre-create lambda sequence
+make_lambdas <- make_lambda_sequence(
+  x = predictors,
+  y = outcome,
+  nlambda = 10L
+)
+
+# Now fit...
+elastic_net_illustration <- initialize_enfold(x = predictors, y = outcome) |>
+  add_learners(lrn_glmnet(
+    "Elnet",
+    family = "gaussian",
+    lambda = make_lambdas
+  )) |>
+  add_cv_folds(inner_cv = NA, outer_cv = 5L) |>
+  fit()
+
+# ...and estimate risk across the lambda sequence
+risk_learners(elastic_net_illustration, type = "cv", loss_fun = loss_gaussian())
+#>    Elnet/0.357660725441877    Elnet/0.128536600209929 
+#>                  0.4474022                  0.2833254 
+#>   Elnet/0.0461936590133436   Elnet/0.0166011402943286 
+#>                  0.2195240                  0.2105996 
+#>  Elnet/0.00596614048244957  Elnet/0.00214411971860052 
+#>                  0.2093660                  0.2091899 
+#> Elnet/0.000770556674153949 Elnet/0.000276923710431031 
+#>                  0.2091632                  0.2091583 
+#> Elnet/9.95212214378516e-05 Elnet/3.57660725441877e-05 
+#>                  0.2091572                  0.2091569
+```

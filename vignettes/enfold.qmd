@@ -123,17 +123,16 @@ systems via the `bigstatsr` and `arrow` packages. Check the big data guide
 for more details.
 :::
 
-We can afterwards look at the slots inside the task:
+We can afterwards look at the task object:
 
 ```{r initialize}
 task <- initialize_enfold(x = predictors, y = outcome)
 task
 ```
 
-That's many empty slots! We will fill these as we continue adding bits
-to the task. By the time the task is fully specified but not yet fit,
-the only remaining empty slots will be `fit_objects` and `ensembles`,
-which hold fitted learners and metalearners.
+Beyond the sample size and number of predictors, we are told
+that none of the other slots are filled yet. We will add them in the
+following steps.
 
 ## Step 2 — Add learners
 
