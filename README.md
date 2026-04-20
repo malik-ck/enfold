@@ -20,6 +20,8 @@ and hyperparameter optimizers. There are three distinctive features of
 - Predictions from cross-validated ensembles as first-class feature
 - Very simple learner creation via built-in factory makers
 
+The brief example below is followed by a list learner illustration.
+
 ## Installation
 
 You can install the development version of `enfold` from
@@ -32,12 +34,15 @@ pak::pak("malik-ck/enfold")
 
 ## Example
 
-We use the built-in `enfold_demo` data set to predict HbA1c. Suppose we
-wanted to compare HbA1c among those in our study that had coronary heart
-disease to those who did not. We use a simple mean learner, a random
-forest, and a generalized linear model (GLM). For illustration, we
-create a GLM template in the code block below, though `enfold` of course
-ships one as `lrn_glmnet()`.
+We use the built-in `enfold_demo` data set to predict HbA1c. We use a
+simple mean learner, a random forest, and a generalized linear model
+(GLM). For illustration, we create a GLM template in the code block
+below, though `enfold` of course ships one as `lrn_glmnet()`. We do so
+by using `make_learner_factory()`, which needs two arguments: `fit` and
+`preds`. The former needs to be a function with arguments `x` and `y`.
+The latter needs to be a function with arguments `object` and `data`.
+Additional arguments we want our learner factory to have (e.g.,
+`family`) are passed as named arguments to `make_learner_factory()`.
 
 ``` r
 set.seed(7441)
@@ -48,11 +53,7 @@ predictors <- enfold_demo[, setdiff(names(enfold_demo), "hba1c")]
 outcome <- enfold_demo$hba1c
 
 # Create a GLM template
-# fit always needs to be a function of x and y, even if we use more arguments.
-# preds always needs to be a function of object and data.
-# Additional required arguments are passed as named arguments to make_learner_factory.
-# Here, we add "family" without value, which makes the family argument of our learner
-# have no default.
+# 'family' is passed without value, which makes it have no default in the resulting factory.
 my_glm_maker <- make_learner_factory(
   fit = function(x, y) glm(y ~ ., data = data.frame(y = y, x), family = family),
   preds = function(object, data) {
@@ -65,13 +66,21 @@ my_glm_maker <- make_learner_factory(
 # The first argument is 'name', added by the learner factory maker, and required
 my_glm <- my_glm_maker(name = "My GLM", family = gaussian())
 
+# The resulting template can also be used for other GLM families. 
+# Say we wanted a logistic regression instead:
+# my_logistic <- my_glm_maker(name = "My Logistic", family = binomial())
+
 # Other learners to add: mean learner, random forest
 mean_learner <- lrn_mean("Mean")
 ranger_learner <- lrn_ranger("Random Forest", num.trees = 300)
+```
 
-# Build superlearner ensembles via three-fold cross-validation.
-# Do this in an outer three-fold cross-validation loop
-# to get pure out-of-fold predictions.
+We now build superlearner ensembles using the three learners. We build
+the ensemble using three-fold cross-validation, and run additionally an
+outer loop of cross-validation to get pure out-of-fold predictions for
+the superlearner.
+
+``` r
 superlearner_ensembles <- initialize_enfold(predictors, outcome) |>
   add_learners(my_glm, mean_learner, ranger_learner) |>
   add_metalearners(mtl_superlearner("SL")) |>
@@ -99,55 +108,6 @@ risk_learners(
 #>        My GLM          Mean Random Forest 
 #>     0.2095792     0.4487277     0.1858747
 ```
-
-We now want to predict HbA1c, setting coronary heart disease to `1` or
-`0` throughout our sample. This does not estimate a causal quantity in
-this case, but helps us assess whether we expect people with coronary
-heart disease to have a different HbA1c, averaged over the covariate
-distribution in our study. Note that the data in `enfold_demo` is
-simulated and does not provide clinical insight. The predictions we
-generate here are cross-validated. We take the mean of predictions to
-summarize our results.
-
-``` r
-# Setting to no CHD
-data_no_chd <- predictors
-data_no_chd$coronary_heart_disease <- 0
-
-# Setting to all CHD
-data_all_chd <- predictors
-data_all_chd$coronary_heart_disease <- 1
-
-# Predicting
-no_chd_preds <- predict(
-  superlearner_ensembles,
-  newdata = data_no_chd,
-  type = "cv"
-)
-all_chd_preds <- predict(
-  superlearner_ensembles,
-  newdata = data_all_chd,
-  type = "cv"
-)
-
-# Looking at the results...
-
-# Mean among no CHD:
-mean(no_chd_preds)
-#> [1] 5.522485
-
-# Mean among all CHD:
-mean(all_chd_preds)
-#> [1] 6.098061
-
-# Mean difference 1 - 0:
-mean(all_chd_preds) - mean(no_chd_preds)
-#> [1] 0.5755761
-```
-
-If we wanted non-cross-validated predictions (typical for, say, model
-deployment), we would set `outer_cv = NA` and change `type` to
-`ensemble`.
 
 Check the package vignettes for advanced functionality, such as
 pipelines and grids.
@@ -180,13 +140,13 @@ elastic_net_illustration <- initialize_enfold(x = predictors, y = outcome) |>
 # ...and estimate risk across the lambda sequence
 risk_learners(elastic_net_illustration, type = "cv", loss_fun = loss_gaussian())
 #>    Elnet/0.357660725441877    Elnet/0.128536600209929 
-#>                  0.4474022                  0.2833254 
+#>                  0.4471337                  0.2817041 
 #>   Elnet/0.0461936590133436   Elnet/0.0166011402943286 
-#>                  0.2195240                  0.2105996 
+#>                  0.2188772                  0.2101855 
 #>  Elnet/0.00596614048244957  Elnet/0.00214411971860052 
-#>                  0.2093660                  0.2091899 
+#>                  0.2090618                  0.2089009 
 #> Elnet/0.000770556674153949 Elnet/0.000276923710431031 
-#>                  0.2091632                  0.2091583 
+#>                  0.2088797                  0.2088768 
 #> Elnet/9.95212214378516e-05 Elnet/3.57660725441877e-05 
-#>                  0.2091572                  0.2091569
+#>                  0.2088765                  0.2088762
 ```
