@@ -94,10 +94,10 @@ fit.enfold_task <- function(object, add_future_pkgs = NULL, ...) {
     object$metalearners <- list()
   }
 
-  # Grid learners require inner CV
+  # Grid learners require inner CV if there is a search engine
   has_grids <- any(vapply(
     object$learners,
-    function(lrn) inherits(lrn, "enfold_grid"),
+    function(lrn) inherits(lrn, "enfold_grid") && !is.null(lrn$search_engine),
     logical(1L)
   ))
   if (has_grids && is.null(cv$build_sets)) {
