@@ -194,6 +194,14 @@ make_bare_grid <- function(name, learner_object, parameters) {
 
 #' @export
 fit.enfold_grid <- function(object, x, y, ...) {
+  if (!is.null(object$search_engine)) {
+    stop(
+      "fit() is disabled for grids with a search engine. ",
+      "Pass it to add_learners() and let fit.enfold_task() handle it.",
+      call. = FALSE
+    )
+  }
+
   # Check that passed parameters are all discrete (no ranges) since we have no search engine to resolve them
   if (
     any(
@@ -214,15 +222,7 @@ fit.enfold_grid <- function(object, x, y, ...) {
       call. = FALSE
     )
   }
-
-  if (!is.null(object$search_engine)) {
-    stop(
-      "fit() is disabled for grids with a search engine. ",
-      "Pass it to add_learners() and let fit.enfold_task() handle it.",
-      call. = FALSE
-    )
-  }
-  # draw() with n = NULL errors if any param is enfold_range, as intended
+  # draw() with n = NULL errors if any param is enfold_range
   combo_df <- draw(object$hyperparams, n = NULL)
   n_combos <- nrow(combo_df)
   if (n_combos == 0L) {
