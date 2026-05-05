@@ -900,7 +900,7 @@ lrn_glmnet <- function(
         object[["model"]],
         newx = data,
         newoffset = get_offset,
-        type = "link"
+        type = "response"
       )
       preds_list <- asplit(pred_mat, 2)
       names(preds_list) <- as.character(object[["model"]]$lambda)
