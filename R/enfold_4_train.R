@@ -81,6 +81,7 @@ fit.enfold_task <- function(object, add_future_pkgs = NULL, ...) {
   cv <- object$cv
   x <- object$x_env$x
   y <- object$y_env$y
+  cols <- object$cols
 
   object$future_pkgs <- unique(c(object$future_pkgs, add_future_pkgs))
 
@@ -140,7 +141,8 @@ fit.enfold_task <- function(object, add_future_pkgs = NULL, ...) {
         metalearners = new_metalearners,
         x = x,
         y = y,
-        future_pkgs = object$future_pkgs
+        future_pkgs = object$future_pkgs,
+        cols = cols
       )
 
       # Append new fitted metalearners; preserve existing ensemble attributes
@@ -165,7 +167,8 @@ fit.enfold_task <- function(object, add_future_pkgs = NULL, ...) {
       metalearners = object$metalearners,
       x = x,
       y = y,
-      future_pkgs = object$future_pkgs
+      future_pkgs = object$future_pkgs,
+      cols = cols
     )
   } else {
     NULL
@@ -226,7 +229,8 @@ fit.enfold_task <- function(object, add_future_pkgs = NULL, ...) {
     y = y,
     perf_folds = perf_folds,
     learners = learners_for_fit,
-    future_pkgs = object$future_pkgs
+    future_pkgs = object$future_pkgs,
+    cols = cols
   )
 
   # Store results on the task
@@ -262,20 +266,23 @@ fit.enfold_task <- function(object, add_future_pkgs = NULL, ...) {
 #' @param perf_folds A \code{enfold_fold_list} of performance (outer) folds.
 #' @param learners A list of \code{enfold_learner} objects (no grids).
 #' @param future_pkgs Character vector of packages for parallel workers.
+#' @param cols Optional column specification (character or integer vector) to
+#'   restrict which columns of \code{x} are used. NULL means all columns.
 #' @return A list of length \code{length(perf_folds)}, each element a list of
 #'   fitted learner objects.
-fit_ensemble <- function(x, y, perf_folds, learners, future_pkgs) {
+fit_ensemble <- function(x, y, perf_folds, learners, future_pkgs, cols = NULL) {
   future.apply::future_lapply(
     perf_folds,
     function(fold) {
       tr <- training_set(fold)
       future.apply::future_lapply(
         learners,
-        function(lrn) fit(lrn, subset_x(x, tr), subset_y(y, tr)),
+        function(lrn) fit(lrn, subset_x(x, tr, cols), subset_y(y, tr)),
         future.globals = list(
           x        = x,
           y        = y,
           tr       = tr,
+          cols     = cols,
           subset_x = subset_x,
           subset_y = subset_y
         ),
@@ -287,6 +294,7 @@ fit_ensemble <- function(x, y, perf_folds, learners, future_pkgs) {
     future.globals = list(
       x           = x,
       y           = y,
+      cols        = cols,
       learners    = learners,
       future_pkgs = future_pkgs,
       subset_y    = subset_y,
@@ -314,6 +322,8 @@ fit_ensemble <- function(x, y, perf_folds, learners, future_pkgs) {
 #' @param x Full predictor matrix or data frame.
 #' @param y Full outcome vector or matrix.
 #' @param future_pkgs Character vector of packages for parallel workers.
+#' @param cols Optional column specification (character or integer vector) to
+#'   restrict which columns of \code{x} are used. NULL means all columns.
 #' @return A list of length \code{length(cv$build_sets)}, each element a
 #'   list of fitted metalearner objects with an \code{indices} attribute.
 #' @keywords internal
@@ -324,7 +334,8 @@ build_ensembles <- function(
   metalearners,
   x,
   y,
-  future_pkgs = character(0L)
+  future_pkgs = character(0L),
+  cols = NULL
 ) {
   if (!inherits(cv, "enfold_cv")) {
     stop("`cv` must be a enfold_cv object.")
@@ -345,7 +356,7 @@ build_ensembles <- function(
         seq_along(learners),
         function(i) {
           lrn <- learners[[i]]
-          contrib <- cv_fit(lrn, inner_folds, x, y, future_pkgs = future_pkgs)
+          contrib <- cv_fit(lrn, inner_folds, x, y, future_pkgs = future_pkgs, cols = cols)
           list(
             i        = i,
             contrib  = contrib,
@@ -359,6 +370,7 @@ build_ensembles <- function(
           inner_folds = inner_folds,
           x           = x,
           y           = y,
+          cols        = cols,
           future_pkgs = future_pkgs
         ),
         future.packages = c(future_pkgs, "enfold"),
@@ -408,6 +420,7 @@ build_ensembles <- function(
     future.globals = list(
       x            = x,
       y            = y,
+      cols         = cols,
       learners     = learners,
       metalearners = metalearners,
       future_pkgs  = future_pkgs,

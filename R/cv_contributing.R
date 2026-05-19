@@ -1,17 +1,17 @@
 # cv_fit generic and methods — internal only
 # These are the workhorses used by build_ensembles and the grid search engines.
 #' @keywords internal
-cv_fit <- function(learner, folds, x, y, future_pkgs = character(0L), ...) UseMethod("cv_fit")
+cv_fit <- function(learner, folds, x, y, future_pkgs = character(0L), cols = NULL, ...) UseMethod("cv_fit")
 
 # Default: one fit per fold, combined across folds, one output name.
 #' @exportS3Method enfold::cv_fit
-cv_fit.default <- function(learner, folds, x, y, future_pkgs = character(0L), ...) {
+cv_fit.default <- function(learner, folds, x, y, future_pkgs = character(0L), cols = NULL, ...) {
   if (!inherits(folds, "enfold_fold_list")) {
     stop("`folds` must be an `enfold_fold_list`.")
   }
   lrn_nm <- get_lrn_display_name(learner)
   all_idx <- unlist(lapply(folds, validation_set))
-  chunks <- fit_predict_folds(learner, folds, x, y, lrn_nm, future_pkgs)
+  chunks <- fit_predict_folds(learner, folds, x, y, lrn_nm, future_pkgs, cols = cols)
   if (any(vapply(chunks, `[[`, logical(1L), "failed"))) {
     failed <- which(vapply(chunks, `[[`, logical(1L), "failed"))
     warning(sprintf(
@@ -29,14 +29,14 @@ cv_fit.default <- function(learner, folds, x, y, future_pkgs = character(0L), ..
 # Pipeline: fit the full pipeline per fold via fit_predict_folds(), then split
 # the named-list predictions by path name and combine across folds.
 #' @exportS3Method enfold::cv_fit
-cv_fit.enfold_pipeline <- function(learner, folds, x, y, future_pkgs = character(0L), ...) {
+cv_fit.enfold_pipeline <- function(learner, folds, x, y, future_pkgs = character(0L), cols = NULL, ...) {
   if (!inherits(folds, "enfold_fold_list")) {
     stop("`folds` must be an `enfold_fold_list`.")
   }
   lrn_nm <- paste(active_path_names(learner), collapse = "|")
   all_idx <- unlist(lapply(folds, validation_set))
 
-  chunks <- fit_predict_folds(learner, folds, x, y, lrn_nm, future_pkgs)
+  chunks <- fit_predict_folds(learner, folds, x, y, lrn_nm, future_pkgs, cols = cols)
 
   if (any(vapply(chunks, `[[`, logical(1L), "failed"))) {
     failed_folds <- which(vapply(chunks, `[[`, logical(1L), "failed"))
@@ -65,7 +65,7 @@ cv_fit.enfold_pipeline <- function(learner, folds, x, y, future_pkgs = character
 
 # ── cv_fit.enfold_grid ─────────────────────────────────────────────────────
 #' @exportS3Method enfold::cv_fit
-cv_fit.enfold_grid <- function(learner, folds, x, y, future_pkgs = character(0L), ...) {
+cv_fit.enfold_grid <- function(learner, folds, x, y, future_pkgs = character(0L), cols = NULL, ...) {
   if (!inherits(folds, "enfold_fold_list")) {
     stop("`folds` must be an `enfold_fold_list`.", call. = FALSE)
   }
@@ -92,7 +92,7 @@ cv_fit.enfold_grid <- function(learner, folds, x, y, future_pkgs = character(0L)
       if (is.null(mod)) {
         return(NULL)
       }
-      contrib <- tryCatch(cv_fit(mod, folds, x, y, future_pkgs = future_pkgs), error = function(e) NULL)
+      contrib <- tryCatch(cv_fit(mod, folds, x, y, future_pkgs = future_pkgs, cols = cols), error = function(e) NULL)
       if (is.null(contrib) || !is.null(attr(contrib, "failed_learner"))) {
         return(NULL)
       }
@@ -140,13 +140,13 @@ cv_fit.enfold_grid <- function(learner, folds, x, y, future_pkgs = character(0L)
 # enfold_list: single learner whose predict() returns a named list.
 # Each list entry is treated as an independent learner output.
 #' @exportS3Method enfold::cv_fit
-cv_fit.enfold_list <- function(learner, folds, x, y, future_pkgs = character(0L), ...) {
+cv_fit.enfold_list <- function(learner, folds, x, y, future_pkgs = character(0L), cols = NULL, ...) {
   if (!inherits(folds, "enfold_fold_list")) {
     stop("`folds` must be an `enfold_fold_list`.")
   }
   lrn_nm <- get_lrn_display_name(learner)
   all_idx <- unlist(lapply(folds, validation_set))
-  chunks <- fit_predict_folds(learner, folds, x, y, lrn_nm, future_pkgs)
+  chunks <- fit_predict_folds(learner, folds, x, y, lrn_nm, future_pkgs, cols = cols)
   if (any(vapply(chunks, `[[`, logical(1L), "failed"))) {
     return(structure(list(), failed_learner = lrn_nm))
   }
@@ -177,7 +177,7 @@ cv_fit.enfold_list <- function(learner, folds, x, y, future_pkgs = character(0L)
 # Fit a learner on each fold and collect validation-set predictions.
 # Returns a list with one element per fold; each element has fields
 # $idx (validation indices), $preds (predictions or NULL), $failed (logical).
-fit_predict_folds <- function(learner, folds, x, y, lrn_nm, future_pkgs = character(0L)) {
+fit_predict_folds <- function(learner, folds, x, y, lrn_nm, future_pkgs = character(0L), cols = NULL) {
   if (!inherits(folds, "enfold_fold_list")) {
     stop("`folds` must be an `enfold_fold_list`.")
   }
@@ -187,9 +187,9 @@ fit_predict_folds <- function(learner, folds, x, y, lrn_nm, future_pkgs = charac
       fold <- folds[[k]]
       tr <- training_set(fold)
       val <- validation_set(fold)
-      x_tr <- subset_x(x, tr)
+      x_tr <- subset_x(x, tr, cols)
       y_tr <- subset_y(y, tr)
-      x_val <- subset_x(x, val)
+      x_val <- subset_x(x, val, cols)
       tryCatch(
         {
           f <- fit(learner, x_tr, y_tr)
@@ -212,6 +212,7 @@ fit_predict_folds <- function(learner, folds, x, y, lrn_nm, future_pkgs = charac
       learner  = learner,
       x        = x,
       y        = y,
+      cols     = cols,
       lrn_nm   = lrn_nm,
       training_set               = training_set,
       `training_set.enfold_fold` = training_set.enfold_fold,

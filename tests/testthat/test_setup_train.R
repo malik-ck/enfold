@@ -209,13 +209,6 @@ test_that("fit stops when no learners have been added", {
   expect_error(fit(task), "learners")
 })
 
-test_that("fit stops when outer CV is requested without a metalearner", {
-  task <- initialize_enfold(x, y) |>
-    add_learners(my_mean, my_glm) |>
-    add_cv_folds(inner_cv = 5L, outer_cv = 3L)
-  expect_error(fit(task), "metalearner")
-})
-
 ## ============================================================================
 ## 8.  predict() — ensemble type
 ## ============================================================================

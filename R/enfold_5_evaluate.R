@@ -77,17 +77,22 @@ predict.enfold_task_fitted <- function(
       )
     }
 
+    cols <- object$cols
     x <- object$x_env$x
     if (!is.null(newdata)) {
+      expected_ncol <- if (!is.null(cols)) length(cols) else ncol(x)
       if (!is.null(dim(newdata)) && !is.null(dim(x))) {
-        if (ncol(newdata) != ncol(x)) {
+        if (ncol(newdata) != expected_ncol) {
           stop(
-            "ncol(newdata) must match ncol of the training data.",
+            "ncol(newdata) must match the number of training predictors ",
+            sprintf("(%d).", expected_ncol),
             call. = FALSE
           )
         }
       }
       x <- newdata
+    } else if (!is.null(cols)) {
+      x <- x[, cols, drop = FALSE]
     }
 
     perf_folds <- object$cv$performance_sets
@@ -139,9 +144,13 @@ predict.enfold_task_fitted <- function(
     )
   }
 
+  cols <- object$cols
   fold_id <- if (object$is_cv_ensemble) ensemble_fold_id else 1L
   if (is.null(newdata)) {
     newdata <- object$x_env$x
+    if (!is.null(cols)) newdata <- newdata[, cols, drop = FALSE]
+  } else if (!is.null(cols)) {
+    newdata <- newdata[, cols, drop = FALSE]
   }
 
   preds_list <- make_preds_list(object$fit_objects[[fold_id]], newdata)
@@ -301,8 +310,10 @@ fold_risk <- function(object, loss_fun, metalearner_name = NULL, ...) {
   loss_fun <- validate_loss_fun(loss_fun)
   use_names <- resolve_metalearner_names(object, metalearner_name)
 
+  cols <- object$cols
   x <- object$x_env$x
   y <- object$y_env$y
+  if (!is.null(cols)) x <- x[, cols, drop = FALSE]
   perf_folds <- object$cv$performance_sets
   n_folds <- length(perf_folds)
 
@@ -505,8 +516,12 @@ predict_learners <- function(
       )
     }
     fold_id <- if (object$is_cv_ensemble) fold_id else 1L
+    cols <- object$cols
     if (is.null(newdata)) {
       newdata <- object$x_env$x
+      if (!is.null(cols)) newdata <- newdata[, cols, drop = FALSE]
+    } else if (!is.null(cols)) {
+      newdata <- newdata[, cols, drop = FALSE]
     }
     return(make_preds_list(object$fit_objects[[fold_id]], newdata))
   }
@@ -697,6 +712,9 @@ print.enfold_task_fitted <- function(x, ...) {
   )
   cat(sprintf("  Learners     : %d\n", length(x$learners)))
   cat(sprintf("  Metalearners : %d\n", length(x$metalearners)))
+  if (!is.null(x$cols)) {
+    cat(sprintf("  Predictors   : %d (of %d)\n", length(x$cols), ncol(x$x_env$x)))
+  }
   cat(sprintf("  Inner folds  : %d\n", n_build))
   cat(sprintf("  %s\n", cv_word))
   cat(paste(rep("\u2500", 50), collapse = ""), "\n")
@@ -798,7 +816,9 @@ make_preds_list <- function(fit_objects_fold, newdata) {
 
 # Compute out-of-fold learner predictions over outer performance folds
 cv_learner_preds <- function(object) {
+  cols <- object$cols
   x <- object$x_env$x
+  if (!is.null(cols)) x <- x[, cols, drop = FALSE]
   perf_folds <- object$cv$performance_sets
   n_folds <- length(perf_folds)
 

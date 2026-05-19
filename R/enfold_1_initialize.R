@@ -12,6 +12,10 @@
 #'   requested rows are read into memory inside each fold loop.
 #' @param y A vector or matrix (or an object inheriting from either) of outcome
 #'   values. Must have the same number of rows (or elements) as \code{x}.
+#' @param cols Optional column specification to restrict predictors.  Can be a
+#'   character vector of column names or an integer vector of column positions.
+#'   When supplied, only these columns are used for fitting, prediction, and
+#'   risk evaluation.  The default (\code{NULL}) uses all columns.
 #' @return An object of class \code{enfold_task}.
 #' @seealso \code{\link{add_learners}}, \code{\link{add_cv_folds}},
 #'   \code{\link{fit.enfold_task}}
@@ -21,7 +25,8 @@
 #' y <- mtcars$mpg
 #' task <- initialize_enfold(x, y)
 #' task
-initialize_enfold <- function(x, y) {
+#'
+initialize_enfold <- function(x, y, cols = NULL) {
   # Convert file path to an enfold_arrow_file reference (validates + caches nrow)
   if (is.character(x) && length(x) == 1L) {
     x <- new_arrow_file(x)
@@ -60,11 +65,53 @@ initialize_enfold <- function(x, y) {
   y_env$y <- y
   lockEnvironment(y_env, bindings = TRUE)
 
+  # Validate and normalise cols
+  if (!is.null(cols)) {
+    if (length(cols) == 0L) {
+      stop("`cols` must not be empty. Use NULL to select all columns.", call. = FALSE)
+    }
+    x_ncol <- ncol(x)
+    if (is.character(cols)) {
+      # Check names exist for matrix / data.frame (Arrow backends handled later)
+      if (is.matrix(x) || is.data.frame(x)) {
+        x_nms <- colnames(x)
+        if (is.null(x_nms)) {
+          stop("`x` has no column names; use integer `cols` instead.", call. = FALSE)
+        }
+        bad <- setdiff(cols, x_nms)
+        if (length(bad) > 0L) {
+          stop(
+            "Column(s) not found in `x`: ",
+            paste(sprintf("'%s'", bad), collapse = ", "),
+            call. = FALSE
+          )
+        }
+      }
+    } else if (is.numeric(cols)) {
+      cols <- as.integer(cols)
+      if (any(cols < 1L | cols > x_ncol)) {
+        stop(
+          "Column indices in `cols` must be between 1 and ncol(x) = ",
+          x_ncol, ".",
+          call. = FALSE
+        )
+      }
+      # Normalise integer indices to character names for matrix / data.frame
+      if (is.matrix(x) || is.data.frame(x)) {
+        x_nms <- colnames(x)
+        if (!is.null(x_nms)) cols <- x_nms[cols]
+      }
+    } else {
+      stop("`cols` must be a character or integer vector, or NULL.", call. = FALSE)
+    }
+  }
+
   # Get a starting list
   structure(
     list(
       x_env = x_env,
       y_env = y_env,
+      cols = cols,
       # Also the ones initialized as NULL
       learners = NULL,
       metalearners = NULL,
@@ -86,7 +133,11 @@ print.enfold_task <- function(x, ...) {
   cat("Enfold Task\n\n")
   cat("Data:\n")
   cat(sprintf("  Observations : %d\n", nrow(x$x_env$x)))
-  cat(sprintf("  Predictors   : %d\n", ncol(x$x_env$x)))
+  if (!is.null(x$cols)) {
+    cat(sprintf("  Predictors   : %d (of %d)\n", length(x$cols), ncol(x$x_env$x)))
+  } else {
+    cat(sprintf("  Predictors   : %d\n", ncol(x$x_env$x)))
+  }
   cat("\n")
   cv_word <- if (is.null(x$cv)) {
     cat("CV specified   : No\n")
