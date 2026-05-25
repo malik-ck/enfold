@@ -4,7 +4,7 @@
 \alias{initialize_enfold}
 \title{Initialize an enfold task}
 \usage{
-initialize_enfold(x, y)
+initialize_enfold(x, y, cols = NULL)
 }
 \arguments{
 \item{x}{A data frame, matrix, \code{arrow::Table}, \code{FBM} (from
@@ -14,6 +14,11 @@ requested rows are read into memory inside each fold loop.}
 
 \item{y}{A vector or matrix (or an object inheriting from either) of outcome
 values. Must have the same number of rows (or elements) as \code{x}.}
+
+\item{cols}{Optional column specification to restrict predictors.  Can be a
+character vector of column names or an integer vector of column positions.
+When supplied, only these columns are used for fitting, prediction, and
+risk evaluation.  The default (\code{NULL}) uses all columns.}
 }
 \value{
 An object of class \code{enfold_task}.
@@ -30,6 +35,7 @@ x <- mtcars[, -1]
 y <- mtcars$mpg
 task <- initialize_enfold(x, y)
 task
+
 }
 \seealso{
 \code{\link{add_learners}}, \code{\link{add_cv_folds}},

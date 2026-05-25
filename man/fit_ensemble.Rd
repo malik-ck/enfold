@@ -4,7 +4,7 @@
 \alias{fit_ensemble}
 \title{Fit all learners on each performance fold's training set}
 \usage{
-fit_ensemble(x, y, perf_folds, learners, future_pkgs)
+fit_ensemble(x, y, perf_folds, learners, future_pkgs, cols = NULL)
 }
 \arguments{
 \item{x}{Full predictor matrix or data frame.}
@@ -16,6 +16,9 @@ fit_ensemble(x, y, perf_folds, learners, future_pkgs)
 \item{learners}{A list of \code{enfold_learner} objects (no grids).}
 
 \item{future_pkgs}{Character vector of packages for parallel workers.}
+
+\item{cols}{Optional column specification (character or integer vector) to
+restrict which columns of \code{x} are used. NULL means all columns.}
 }
 \value{
 A list of length \code{length(perf_folds)}, each element a list of

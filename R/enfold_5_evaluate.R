@@ -80,17 +80,20 @@ predict.enfold_task_fitted <- function(
     cols <- object$cols
     x <- object$x_env$x
     if (!is.null(newdata)) {
-      expected_ncol <- if (!is.null(cols)) length(cols) else ncol(x)
-      if (!is.null(dim(newdata)) && !is.null(dim(x))) {
-        if (ncol(newdata) != expected_ncol) {
-          stop(
-            "ncol(newdata) must match the number of training predictors ",
-            sprintf("(%d).", expected_ncol),
-            call. = FALSE
-          )
+      if (!is.null(cols)) {
+        x <- newdata[, cols, drop = FALSE]
+      } else {
+        if (!is.null(dim(newdata)) && !is.null(dim(x))) {
+          if (ncol(newdata) != ncol(x)) {
+            stop(
+              "ncol(newdata) must match the number of training predictors ",
+              sprintf("(%d).", ncol(x)),
+              call. = FALSE
+            )
+          }
         }
+        x <- newdata
       }
-      x <- newdata
     } else if (!is.null(cols)) {
       x <- x[, cols, drop = FALSE]
     }

@@ -9,16 +9,13 @@
 #' \code{enfold_cv} object.
 #'
 #' @param task An object of class \code{enfold_task}.
-#' @param inner_cv Integer \eqn{\geq 2}, a function \code{function(n, ...)}
-#'   returning fold index sets, or \code{NA}/\code{NULL} for no inner CV.
-#'   Inner folds are used to build ensemble metalearners.
-#' @param outer_cv Integer \eqn{\geq 2}, a function, or \code{NA}/\code{NULL}
-#'   for no outer CV. Outer folds cross-validate the fitted ensemble.
+#' @param inner_cv Integer \eqn{\geq 2}, a CV function created via \code{\link{make_cv_function}},
+#' or \code{NA}/\code{NULL} for no inner folds. Inner folds are used to build the ensemble metalearner.
+#' @param outer_cv Integer \eqn{\geq 2}, a CV function created via \code{\link{make_cv_function}},
+#' or \code{NA}/\code{NULL} for no outer folds. Outer folds are used to cross-validate the fitted ensemble.
 #' @param cv An optional pre-built \code{enfold_cv} object (e.g. from
 #'   \code{\link{create_cv_folds}}). When supplied, \code{inner_cv} and
 #'   \code{outer_cv} are ignored.
-#' @param ... Additional named arguments forwarded to custom fold functions
-#'   that declare them (e.g. \code{cluster}, \code{strata}).
 #' @return The updated \code{enfold_task} with the \code{cv} slot populated.
 #' @seealso \code{\link{create_cv_folds}}, \code{\link{fit.enfold_task}}
 #' @examples
@@ -93,7 +90,7 @@ add_cv_folds.enfold_task <- function(
 #' @seealso \code{\link{create_cv_folds}}, \code{\link{add_cv_folds}}
 #' @examples
 #' strata <- rep(1:2, length.out = 100)
-#' 
+#'
 #' # Use make_folds() from the origami package here
 #' cv <- create_cv_folds(
 #'   n = 100,
@@ -121,20 +118,26 @@ make_cv_function <- function(fn, ..., .subset = character(0)) {
   required <- setdiff(required, c("n", "..."))
   missing_req <- setdiff(required, names(args))
   if (length(missing_req) > 0L) {
-    stop(sprintf(
-      "`fn` has required argument(s) not provided in `...`: %s",
-      paste(missing_req, collapse = ", ")
-    ), call. = FALSE)
+    stop(
+      sprintf(
+        "`fn` has required argument(s) not provided in `...`: %s",
+        paste(missing_req, collapse = ", ")
+      ),
+      call. = FALSE
+    )
   }
 
   .subset <- as.character(.subset)
   if (length(.subset) > 0L) {
     bad <- setdiff(.subset, names(args))
     if (length(bad) > 0L) {
-      stop(sprintf(
-        "`.subset` name(s) not found in `...`: %s",
-        paste(bad, collapse = ", ")
-      ), call. = FALSE)
+      stop(
+        sprintf(
+          "`.subset` name(s) not found in `...`: %s",
+          paste(bad, collapse = ", ")
+        ),
+        call. = FALSE
+      )
     }
   }
   structure(
@@ -148,9 +151,11 @@ print.enfold_cv_fun <- function(x, ...) {
   cat(sprintf(
     "enfold_cv_fun | %d bound arg(s)%s\n",
     length(x$args),
-    if (length(x$subset_args) > 0L)
+    if (length(x$subset_args) > 0L) {
       sprintf(" | indexed: %s", paste(x$subset_args, collapse = ", "))
-    else ""
+    } else {
+      ""
+    }
   ))
   invisible(x)
 }
@@ -428,15 +433,10 @@ print.enfold_cv <- function(x, ...) {
 #' \code{\link{add_cv_folds}}.
 #'
 #' @param n Total number of observations.
-#' @param inner_cv Integer \eqn{\geq 2}, a function \code{function(n, ...)}
-#'   returning a list of fold index sets (as produced by \code{origami}), or
-#'   \code{NA}/\code{NULL} for no inner folds. Inner folds are used to build
-#'   the ensemble metalearner.
-#' @param outer_cv Integer \eqn{\geq 2}, a function, or \code{NA}/\code{NULL}
-#'   for no outer folds. Outer folds are used to cross-validate the fitted
-#'   ensemble.
-#' @param ... Additional named arguments forwarded to custom fold functions
-#'   that declare them (e.g. \code{cluster}, \code{strata}).
+#' @param inner_cv Integer \eqn{\geq 2}, a CV function created via \code{\link{make_cv_function}},
+#' or \code{NA}/\code{NULL} for no inner folds. Inner folds are used to build the ensemble metalearner.
+#' @param outer_cv Integer \eqn{\geq 2}, a CV function created via \code{\link{make_cv_function}},
+#' or \code{NA}/\code{NULL} for no outer folds. Outer folds are used to cross-validate the fitted ensemble.
 #' @return An \code{enfold_cv} object.
 #' @seealso \code{\link{add_cv_folds}}
 #' @examples
@@ -491,7 +491,11 @@ create_cv_folds <- function(n, inner_cv = NA, outer_cv = NA, ...) {
       if (!is.null(idx) && length(fun$subset_args) > 0L) {
         for (nm in fun$subset_args) {
           a <- call_args[[nm]]
-          call_args[[nm]] <- if (!is.null(dim(a))) a[idx, , drop = FALSE] else a[idx]
+          call_args[[nm]] <- if (!is.null(dim(a))) {
+            a[idx, , drop = FALSE]
+          } else {
+            a[idx]
+          }
         }
       }
       do.call(fun$fn, c(list(n = n), call_args))

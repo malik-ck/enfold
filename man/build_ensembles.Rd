@@ -4,7 +4,15 @@
 \alias{build_ensembles}
 \title{Fit ensembles across inner folds without retaining fitted learner objects}
 \usage{
-build_ensembles(cv, learners, metalearners, x, y, future_pkgs = character(0L))
+build_ensembles(
+  cv,
+  learners,
+  metalearners,
+  x,
+  y,
+  future_pkgs = character(0L),
+  cols = NULL
+)
 }
 \arguments{
 \item{cv}{A \code{enfold_cv} with \code{build_sets} populated.}
@@ -18,6 +26,9 @@ build_ensembles(cv, learners, metalearners, x, y, future_pkgs = character(0L))
 \item{y}{Full outcome vector or matrix.}
 
 \item{future_pkgs}{Character vector of packages for parallel workers.}
+
+\item{cols}{Optional column specification (character or integer vector) to
+restrict which columns of \code{x} are used. NULL means all columns.}
 }
 \value{
 A list of length \code{length(cv$build_sets)}, each element a
